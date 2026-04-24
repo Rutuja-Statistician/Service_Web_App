@@ -21,16 +21,14 @@ if page == "Upload File & Create Report":
     
     # 1. File Uploader
     uploaded_raw_file = st.file_uploader("Choose the Raw Data Excel file", type=["xlsx"])
-    
-    # Hardcoded status file path as per your main.py (or you could upload this too)
-    status_file_path = r"D:\Amstrad\Service\Statuswise_norms_teams_data.xlsx"
+
 
     if uploaded_raw_file is not None:
         if st.button("Generate Report"):
             with st.spinner("Processing data and applying formatting..."):
                 try:
                     # 2. Run your processing logic
-                    final_df = func1(uploaded_raw_file, status_file_path)
+                    final_df = func1(uploaded_raw_file)
 
                     if isinstance(final_df, pd.DataFrame):
                         # 3. Create an In-Memory Buffer for the Excel file
