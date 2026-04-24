@@ -341,8 +341,8 @@ if __name__ == "__main__":
         # status_file = r"D:\Amstrad\Service\Statuswise_norms_teams_data.xlsx"
         # out_name = f"service_daily_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
-        # final_df = func1(raw_file, status_file)
-
+        # final_df = func1(raw_file)
+        # print("The shape of final_df is :", final_df.shape)
         # if final_df is not None:
         #     # We open the writer ONCE here and pass it to all functions
         #     with pd.ExcelWriter(out_name, engine="xlsxwriter") as writer:
