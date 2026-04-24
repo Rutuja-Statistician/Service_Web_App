@@ -1,12 +1,42 @@
 import sys
 import pandas as pd
+import streamlit as st
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
+
+# To create connection
+def get_gsheet_conn():
+    """Create authenticated gspread connection using secrets."""
+    creds_dict = {
+        "type": st.secrets["connections"]["gsheets"]["type"],
+        "project_id": st.secrets["connections"]["gsheets"]["project_id"],
+        "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
+        "private_key": st.secrets["connections"]["gsheets"]["private_key"],
+        "client_email": st.secrets["connections"]["gsheets"]["client_email"],
+        "client_id": st.secrets["connections"]["gsheets"]["client_id"],
+        "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
+        "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
+    }
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    return client
+
 
 def func1(raw_file, statuswise_file):
     try:
+        conn  = st.connection("gsheets", type = GSheetsConnection)
+
         data = pd.read_excel(raw_file)
         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
-        
+        # To select the subset of the dataframe from the complete data
         selected_columns = ["service_id","circle", "customer_type", "call_date", "updatedate", "status_code"]
         data = data[selected_columns]
         data["service_id"] = data["service_id"].astype(str)
@@ -49,11 +79,36 @@ def func1(raw_file, statuswise_file):
         merged_data["enc1_flag"] = (merged_data["category"] == "Encroaching1").astype(int)
         merged_data["enc2_flag"] = (merged_data["category"] == "Encroaching2").astype(int)
         merged_data.to_excel("new_one.xlsx", index = False)
-        return merged_data 
+        st.success("Func1 run successfully")
+        
+        # To write data in google sheet
+        if merged_data is not None and not merged_data.empty:
+            client = get_gsheet_conn()
+            
+            SPREADSHEET_ID = "1XlKbbbdJ3ySHwDxm_liTTOQf1QhliJHsFFdIz_r-CDY"
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            
+            # Open or create the worksheet
+            try:
+                worksheet = spreadsheet.worksheet("Detailed_Data")
+            except gspread.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet("Detailed_Data", rows=5000, cols=30)
+            
+            # Clear existing data and write fresh
+            worksheet.clear()
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+            worksheet.update(data_to_write)
+            
+            st.success("Data written to Google Sheet successfully!")
+        else:
+            st.warning("No data found after filtering...!")
+        return merged_data
 
     except Exception as e:
         print(f"Error in func1: {e}")
-        return e
+        st.error(f"Error in func1: {e}")
 
 def apply_formatting(workbook, worksheet, summary, title_text):
     try:
@@ -88,7 +143,6 @@ def apply_formatting(workbook, worksheet, summary, title_text):
 
 def circlewise_platter(merged_data, writer):
     try:
-
         summary = merged_data.groupby("circle").agg({
             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
         }).reset_index()
