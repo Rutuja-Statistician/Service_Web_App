@@ -30,10 +30,13 @@ def get_gsheet_conn():
     return client
 
 
-def func1(raw_file, statuswise_file):
+def func1(raw_file):
     try:
-        conn  = st.connection("gsheets", type = GSheetsConnection)
-
+        # Google sheet Connection  
+        client = get_gsheet_conn()
+        SPREADSHEET_ID = "1XlKbbbdJ3ySHwDxm_liTTOQf1QhliJHsFFdIz_r-CDY"
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        
         data = pd.read_excel(raw_file)
         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
         # To select the subset of the dataframe from the complete data
@@ -51,7 +54,11 @@ def func1(raw_file, statuswise_file):
         data["age_from_call_reg"] = data["today_date"] - data["call_date"]
         data["age_from_call_update"] = data["today_date"] - data["updatedate"]
         
-        status_data = pd.read_excel(statuswise_file)
+        # status_data = pd.read_excel(statuswise_file)
+        worksheet = spreadsheet.worksheet("Norms_Data")
+        norms_data = worksheet.get_all_records()
+        status_data = pd.DataFrame(norms_data)
+
         status_data.columns = status_data.columns.str.lower().str.strip().str.replace(" ", "_")
 
         merged_data = data.merge(status_data[["status","team", "number"]], left_on= "status_code", right_on="status", how= "left")
@@ -83,11 +90,6 @@ def func1(raw_file, statuswise_file):
         
         # To write data in google sheet
         if merged_data is not None and not merged_data.empty:
-            client = get_gsheet_conn()
-            
-            SPREADSHEET_ID = "1XlKbbbdJ3ySHwDxm_liTTOQf1QhliJHsFFdIz_r-CDY"
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
-            
             # Open or create the worksheet
             try:
                 worksheet = spreadsheet.worksheet("Detailed_Data")
