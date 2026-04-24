@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
-from itables.streamlit import interactive_table
+
 # Import your functions from main.py
 from main import (
     func1, circlewise_platter, statuswise_platter, 
