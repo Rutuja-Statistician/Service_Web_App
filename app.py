@@ -58,11 +58,11 @@ if page == "Upload File & Create Report":
                             file_name=f"service_platter_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
-                        st.dataframe(
-                            final_df,
-                            use_container_width=True,
-                            column_config={"Select": st.column_config.CheckboxColumn()} # if you need selection
-                        )
+                        # st.dataframe(
+                        #     final_df,
+                        #     use_container_width=True,
+                        #     column_config={"Select": st.column_config.CheckboxColumn()} # if you need selection
+                        # )
                     
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
