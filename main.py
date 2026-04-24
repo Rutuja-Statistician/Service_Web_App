@@ -167,6 +167,12 @@ def circlewise_platter(merged_data, writer):
 
         summary.to_excel(writer, sheet_name="Daily Circlewise Platter", index=False, startrow=1)
         apply_formatting(writer.book, writer.sheets["Daily Circlewise Platter"], summary, "All Circlewise Platter And Targets")
+        
+        # To print circlewise platter report on screen
+        st.dataframe(summary,
+                    use_container_width=True,
+                    column_config={"Select": st.column_config.CheckboxColumn()} # if you need selection
+)
     except Exception as e:
         print(f"Error in circlewise platter function: {e}")
         return f"Error in circlewise platter function: {e}"
