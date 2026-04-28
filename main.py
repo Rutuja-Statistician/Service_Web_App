@@ -716,51 +716,6 @@ def fetch_and_format_report():
         show_popup(f"Error generating report: {e}", type="error")
         return None
 
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.message import EmailMessage
-
-def send_email(sender_email, sender_password, recipient_email):
-    # Create a multipart message object
-    msg = MIMEMultipart("alternative")
-    msg['From'] = sender_email
-    msg['To'] = recipient_email
-    msg["Subject"] = "Daily Platter Report"
-
-    # Create email
-    text = "This is plain text"
-    html = f"<html><body><h2>PFA</h2></body></html>"
-    part1 = MIMEText(text, "plain")
-    part2 = MIMEText(html, "html")
-    msg.attach(part1)
-    msg.attach(part2)
-
-    # SMTP server settings
-    smtp_server = "smtp-mail.outlook.com"
-    smtp_port = 587
-
-    try:
-        # Create a secured SSL/TLS connection
-        server = smtplib.SMTP(smtp_server,smtp_port)
-        server.starttls()
-
-        # Login to your outlook email
-        server.login(send_email, sender_password)
-
-        # send email
-        server.sendmail(sender_email,recipient_email, msg.as_string())
-
-        print("Email sent successfully")
-    except smtplib.SMTPException as e:
-        print(f"Error in sending email", str(e))
-    finally:
-        # Close connection
-        server.quit()
-
-sender_email = "business.analyst@amstradworld.com" 
-sender_password = "Rutuja@123"
-recipient_email = "business.analyst@amstradworld.com"
 
 # send_email(sender_email, sender_password, recipient_email)
 
