@@ -52,7 +52,7 @@ if page == "upload":
     st.subheader("📥 Download Platter Report")
     st.caption("Fetches latest data directly from Database and downloads as Excel.")
 
-    if st.button("📥 Download Platter Report"):
+    if st.button("📥 Format Platter Report"):
         with st.spinner("Fetching data from Database and formatting..."):
             report_data = fetch_and_format_report()
 
