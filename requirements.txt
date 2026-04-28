@@ -40,6 +40,7 @@ pyasn1_modules==0.4.2
 pycparser==3.0
 pydeck==0.9.1
 python-dateutil==2.9.0.post0
+pytz==2026.1.post1
 referencing==0.37.0
 requests==2.33.1
 requests-oauthlib==2.0.0
