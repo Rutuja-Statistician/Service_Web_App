@@ -764,8 +764,6 @@ def fetch_and_format_report():
         show_popup(f"Error generating report: {e}", type="error")
         return None
 
-# send_email(sender_email, sender_password, recipient_email)
-
 # # --- Main Execution ---
 # if __name__ == "__main__":
 #     if len(sys.argv) < 2:
