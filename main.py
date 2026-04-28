@@ -1,6 +1,7 @@
 import io
 import sys
 import time
+import pytz
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -185,8 +186,10 @@ def circlewise_platter(merged_data):
 def tracker(df):
     try:
         spreadsheet = connect_gsheet()
+        # Set timezone to India
+        IST = pytz.timezone('Asia/Kolkata')
         today_str = datetime.now().strftime("%Y-%m-%d")
-        time_str  = datetime.now().strftime("%H:%M")
+        time_str  = datetime.now(IST).strftime("%H:%M")
         print("The time string is:",time_str)
 
         # --- Get or create Tracker worksheet ---
@@ -763,6 +766,7 @@ def fetch_and_format_report():
         print(f"Error in fetch_and_format_report: {e}")
         show_popup(f"Error generating report: {e}", type="error")
         return None
+
 
 # # --- Main Execution ---
 # if __name__ == "__main__":
