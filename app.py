@@ -3,10 +3,16 @@ import pandas as pd
 import io
 from datetime import datetime
 
-from main import (func1, circlewise_platter, statuswise_platter,
-    billing_code_status_platter, pdna_status_platter,
-    ran_cn_due_status_platter, dealerwise_platter,
-    fetch_and_format_report)
+from main import (
+    func1,
+    circlewise_platter,
+    statuswise_platter,
+    billing_code_status_platter,
+    pdna_status_platter,
+    ran_cn_due_status_platter,
+    dealerwise_platter,          # ← make sure this matches main.py exactly
+    fetch_and_format_report
+)
 
 from src.sidebar import render_sidebar
 
