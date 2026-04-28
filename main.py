@@ -151,6 +151,9 @@ def circlewise_platter(merged_data):
         col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2"]
         summary = summary[col_order]
 
+        # Sort by Platter1 descending BEFORE adding Total row
+        summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+
         totals = summary.select_dtypes(include='number').sum()
         total_row = pd.DataFrame([totals])
         total_row["Circle"] = "Total"
@@ -176,13 +179,15 @@ def circlewise_platter(merged_data):
 
     except Exception as e:
         print(f"Error in circlewise platter function: {e}")
-        show_popup(f"Error in circlewise_platter is : {e}", type="error")
-        
+        show_popup(f"Error in circlewise_platter is : {e}", type="error") 
+
+
 def tracker(df):
     try:
         spreadsheet = connect_gsheet()
         today_str = datetime.now().strftime("%Y-%m-%d")
         time_str  = datetime.now().strftime("%H:%M")
+        print("The time string is:",time_str)
 
         # --- Get or create Tracker worksheet ---
         try:
@@ -201,6 +206,8 @@ def tracker(df):
         # --- Extract Circle + Platter1 + Platter2 ---
         platter_data = df[["Circle", "Platter1", "Platter2"]].copy()
         platter_data["Circle"] = platter_data["Circle"].astype(str)
+        platter_data["Platter1"] = pd.to_numeric(platter_data["Platter1"], errors= 'coerce').fillna(0)
+        platter_data["Platter2"] = pd.to_numeric(platter_data["Platter2"], errors= 'coerce').fillna(0)
 
         new_p1_col = f"{time_str} P1"
         new_p2_col = f"{time_str} P2"
@@ -266,10 +273,24 @@ def tracker(df):
 
             # Write back updated data
             updated_rows = [existing_df.columns.tolist()] + existing_df.values.tolist()
-            middle_rows = sorted(updated_rows[1:len(updated_rows)-1],key = lambda x: x[1])
-            new_rows = [updated_rows[0]] + middle_rows + [updated_rows[-1]]
-            print("Updated rows are:", new_rows)
-            # print("Updated rows are:", updated_rows)
+            # middle_rows = sorted(updated_rows[1:len(updated_rows)-1],key = lambda x: x[1])
+
+            # Find the index of the latest P1 column (last P1 in headers)
+            headers = updated_rows[0]
+            p1_indices = [i for i, h in enumerate(headers) if h.endswith("P1")]
+            latest_p1_idx = p1_indices[-1]  # ✅ Last P1 column = most recent time
+
+            # Sort middle rows by latest P1 descending, keep header and Total row in place
+            middle_rows = sorted(
+                updated_rows[1:len(updated_rows)-1],
+                key=lambda x: int(float(x[latest_p1_idx])) if x[latest_p1_idx] not in ("", None) else 0,
+                reverse=True 
+            )
+
+            new_rows = [headers] + middle_rows + [updated_rows[-1]]  # header + sorted + Total
+
+
+            # new_rows = [updated_rows[0]] + middle_rows + [updated_rows[-1]]
             worksheet.clear()
             worksheet.update(new_rows)
 
@@ -297,6 +318,9 @@ def statuswise_platter(merged_data):
         
         col_order = ["Status", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
         summary = summary[col_order]
+
+        # Sort by Platter1 descending BEFORE adding Total row
+        summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
         
         totals = summary.select_dtypes(include='number').sum()
         total_row = pd.DataFrame([totals])
@@ -354,6 +378,12 @@ def billing_code_status_platter(merged_data):
             col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
             summary = summary[col_order]
             
+            # Droping the rows where Platter2 is zero
+            summary= summary[summary["Platter2"] != 0]
+
+            # Sort by Platter1 descending BEFORE adding Total row
+            summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+
             totals = summary.select_dtypes(include='number').sum()
             total_row = pd.DataFrame([totals])
             total_row["Circle"] = "Total"
@@ -399,6 +429,12 @@ def pdna_status_platter(merged_data):
             
             col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
             summary = summary[col_order]
+
+            # Droping the rows where Platter2 is zero
+            summary= summary[summary["Platter2"] != 0]
+
+            # Sort by Platter1 descending BEFORE adding Total row
+            summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
             
             totals = summary.select_dtypes(include='number').sum()
             total_row = pd.DataFrame([totals])
@@ -445,6 +481,12 @@ def ran_cn_due_status_platter(merged_data):
             
             col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
             summary = summary[col_order]
+
+            # Droping the rows where Platter2 is zero
+            summary= summary[summary["Platter2"] != 0]
+
+            # Sort by Platter1 descending BEFORE adding Total row
+            summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
             
             totals = summary.select_dtypes(include='number').sum()
             total_row = pd.DataFrame([totals])
@@ -497,11 +539,17 @@ def dealerwise_platter(merged_data):
             col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
             summary = summary[col_order]
             
+            # Droping the rows where Platter2 is zero
+            summary= summary[summary["Platter2"] != 0]
+
+            # Sort by Platter1 descending BEFORE adding Total row
+            summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+
+
             totals = summary.select_dtypes(include='number').sum()
             total_row = pd.DataFrame([totals])
             total_row["Circle"] = "Total"
             summary = pd.concat([summary, total_row], ignore_index=True)
-
             
             # Convert DataFrame to list of lists
             data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
@@ -715,7 +763,6 @@ def fetch_and_format_report():
         print(f"Error in fetch_and_format_report: {e}")
         show_popup(f"Error generating report: {e}", type="error")
         return None
-
 
 # send_email(sender_email, sender_password, recipient_email)
 
