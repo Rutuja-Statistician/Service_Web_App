@@ -1,4 +1,6 @@
+import io
 import sys
+import time
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -29,14 +31,42 @@ def get_gsheet_conn():
     client = gspread.authorize(creds)
     return client
 
-
-def func1(raw_file):
+def connect_gsheet():
     try:
         # Google sheet Connection  
         client = get_gsheet_conn()
         SPREADSHEET_ID = "1XlKbbbdJ3ySHwDxm_liTTOQf1QhliJHsFFdIz_r-CDY"
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        print("Connection successful...!!!")
+        return spreadsheet
+    except Exception as e:
+        print(f"Unable to connect google sheet: {e}")
+        show_popup(f"Unable to connect google sheet: {e}", type="error")
         
+
+def show_popup(message, type = "success"):
+    if type == "success":
+        st.toast(f"✅ {message}")
+    elif type == "error" :
+        st.toast(f"❌ {message}")
+    elif type == "warning":
+        st.toast(f"⚠️ {message}")
+    elif type == "info":
+        st.toast(f"ℹ️ {message}")
+
+def func1(raw_file):
+    try:
+        spreadsheet = connect_gsheet()
+
+        # Open or create the worksheet
+        try:
+            detailData_worksheet = spreadsheet.worksheet("Detailed_Data")
+        except gspread.WorksheetNotFound:
+            detailData_worksheet = spreadsheet.add_worksheet("Detailed_Data", rows=5000, cols=30)
+            
+        # Clear existing data and write fresh
+        detailData_worksheet.clear()
+
         data = pd.read_excel(raw_file)
         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
         # To select the subset of the dataframe from the complete data
@@ -53,17 +83,18 @@ def func1(raw_file):
         data["today_date"] = pd.to_datetime(todayDate)
         data["age_from_call_reg"] = data["today_date"] - data["call_date"]
         data["age_from_call_update"] = data["today_date"] - data["updatedate"]
-        
+
         # status_data = pd.read_excel(statuswise_file)
-        worksheet = spreadsheet.worksheet("Norms_Data")
-        norms_data = worksheet.get_all_records()
+        norms_worksheet = spreadsheet.worksheet("Norms_Data")
+        norms_data = norms_worksheet.get_all_records()
         status_data = pd.DataFrame(norms_data)
 
         status_data.columns = status_data.columns.str.lower().str.strip().str.replace(" ", "_")
 
         merged_data = data.merge(status_data[["status","team", "number"]], left_on= "status_code", right_on="status", how= "left")
-
-        # Adding filter on teams
+        merged_data.to_excel("Raw_Data.xlsx", index= False)
+        
+        # Adding filter on teams, choosing customer xperience
         merged_data = merged_data[merged_data["team"].str.lower().str.strip() == "customer xperience"]
 
         merged_data["age_reg_days"] = merged_data["age_from_call_reg"].dt.days 
@@ -85,66 +116,26 @@ def func1(raw_file):
         merged_data["red_call_flag"] = (merged_data["category"] == "Red Call").astype(int)
         merged_data["enc1_flag"] = (merged_data["category"] == "Encroaching1").astype(int)
         merged_data["enc2_flag"] = (merged_data["category"] == "Encroaching2").astype(int)
-        merged_data.to_excel("new_one.xlsx", index = False)
-        st.success("Func1 run successfully")
         
         # To write data in google sheet
         if merged_data is not None and not merged_data.empty:
-            # Open or create the worksheet
-            try:
-                worksheet = spreadsheet.worksheet("Detailed_Data")
-            except gspread.WorksheetNotFound:
-                worksheet = spreadsheet.add_worksheet("Detailed_Data", rows=5000, cols=30)
-            
-            # Clear existing data and write fresh
-            worksheet.clear()
             
             # Convert DataFrame to list of lists
             data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
-            worksheet.update(data_to_write)
+            detailData_worksheet.update(data_to_write)
             
-            st.success("Data written to Google Sheet successfully!")
+            show_popup("Data stored in the database", type = "success")
         else:
-            st.warning("No data found after filtering...!")
+            show_popup("No data found after filtering...!", type = "info")
         return merged_data
 
     except Exception as e:
         print(f"Error in func1: {e}")
-        st.error(f"Error in func1: {e}")
+        show_popup(f"Error in function is: {e}", type= "error")
 
-def apply_formatting(workbook, worksheet, summary, title_text):
+def circlewise_platter(merged_data):
     try:
-        fmt_header = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center'})
-        fmt_main_title = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center', 'font_size': 14})
-        fmt_red = workbook.add_format({'bold': True, 'bg_color': "#FF0000", 'border': 1, 'align': 'center'})
-        fmt_orange = workbook.add_format({'bg_color': "#FFBF00", 'border': 1, 'align': 'center', 'bold': True})
-        fmt_green = workbook.add_format({'bg_color': "#8BF58B", 'border': 1, 'align': 'center', 'bold': True})
-        fmt_white = workbook.add_format({'border': 1, 'align': 'center', 'bold': True})
-
-        # 1. Write Main Title
-        report_date = datetime.now().strftime("%d-%b-%Y")
-        worksheet.merge_range('A1:F1', f"{title_text} --- {report_date}", fmt_main_title)
-
-        # 2. Apply Data Formatting
-        for row_num in range(2, len(summary) + 2):
-            worksheet.write(row_num, 0, summary.iloc[row_num-2, 0], fmt_white) # Label Column
-            worksheet.write(row_num, 1, summary.iloc[row_num-2, 1], fmt_red)   # Red Call
-            worksheet.write(row_num, 2, summary.iloc[row_num-2, 2], fmt_orange)# Enc1
-            worksheet.write(row_num, 3, summary.iloc[row_num-2, 3], fmt_green) # Platter1
-            worksheet.write(row_num, 4, summary.iloc[row_num-2, 4], fmt_orange)# Enc2
-            worksheet.write(row_num, 5, summary.iloc[row_num-2, 5], fmt_green) # Platter2
-
-        # 3. Write Column Headers
-        for col_num, value in enumerate(summary.columns.values):
-            worksheet.write(1, col_num, value, fmt_header)
-
-        worksheet.set_column('A:F', 18)
-    except Exception as e:
-        print(f"Error in Formatting {worksheet} is : {e}")
-        return f"Error in formatting {worksheet} is : {e}"
-
-def circlewise_platter(merged_data, writer):
-    try:
+        spreadsheet = connect_gsheet()
         summary = merged_data.groupby("circle").agg({
             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
         }).reset_index()
@@ -156,30 +147,142 @@ def circlewise_platter(merged_data, writer):
 
         summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
         summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
-        
-        col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+
+        col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2"]
         summary = summary[col_order]
-        
+
         totals = summary.select_dtypes(include='number').sum()
         total_row = pd.DataFrame([totals])
         total_row["Circle"] = "Total"
         summary = pd.concat([summary, total_row], ignore_index=True)
 
-        summary.to_excel(writer, sheet_name="Daily Circlewise Platter", index=False, startrow=1)
-        apply_formatting(writer.book, writer.sheets["Daily Circlewise Platter"], summary, "All Circlewise Platter And Targets")
-        
-        # To print circlewise platter report on screen
-        st.dataframe(summary,
-                    use_container_width=True,
-                    column_config={"Select": st.column_config.CheckboxColumn()} # if you need selection
-)
+        # Write to Google Sheet
+        try:
+            worksheet = spreadsheet.worksheet("Daily Circlewise Platter")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("Daily Circlewise Platter", rows=5000, cols=30)
+
+        worksheet.clear()
+        data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+        worksheet.update(data_to_write)
+
+        # Call tracker with circlewise summary
+        tracker(summary)
+
+        # st.subheader("Circlewise Platter Preview")
+        # st.dataframe(summary, use_container_width=True)
+
+        show_popup("Circlewise platter report created successfully!", type="success")
+
     except Exception as e:
         print(f"Error in circlewise platter function: {e}")
-        return f"Error in circlewise platter function: {e}"
-
-def statuswise_platter(merged_data, writer):
-
+        show_popup(f"Error in circlewise_platter is : {e}", type="error")
+        
+def tracker(df):
     try:
+        spreadsheet = connect_gsheet()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        time_str  = datetime.now().strftime("%H:%M")
+
+        # --- Get or create Tracker worksheet ---
+        try:
+            worksheet = spreadsheet.worksheet("Tracker")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("Tracker", rows=1000, cols=50)
+
+        # --- Read existing data (returns list of lists) ---
+        existing_data = worksheet.get_all_values()
+
+        # --- Check if first DATA row has today's date (row index 1, skip header) ---
+        if not existing_data or len(existing_data) < 2 or existing_data[1][0] != today_str:
+            worksheet.clear()
+            existing_data = []
+
+        # --- Extract Circle + Platter1 + Platter2 ---
+        platter_data = df[["Circle", "Platter1", "Platter2"]].copy()
+        platter_data["Circle"] = platter_data["Circle"].astype(str)
+
+        new_p1_col = f"{time_str} P1"
+        new_p2_col = f"{time_str} P2"
+
+        # Helper: push Total row(s) to the very bottom
+        def sort_total_to_bottom(df_in):
+            is_total = df_in["Circle"].str.strip().str.lower() == "total"
+            return pd.concat(
+                [df_in[~is_total], df_in[is_total]],
+                ignore_index=True
+            )
+
+        if not existing_data:
+            # --- First run of the day: write fresh ---
+            print("No existing data, writing fresh...")
+            header = ["Date", "Circle", new_p1_col, new_p2_col]
+            rows = [header]
+            for _, row in platter_data.iterrows():
+                rows.append([today_str, str(row["Circle"]), str(row["Platter1"]), str(row["Platter2"])])
+            worksheet.update(rows)
+
+        else:
+            # --- Subsequent runs: append new P1/P2 columns ---
+            print("Existing data found, appending new columns...")
+            print("Existing headers:", existing_data[0])
+
+            # Convert list of lists → DataFrame
+            existing_df = pd.DataFrame(existing_data[1:], columns=existing_data[0])
+            existing_df["Circle"] = existing_df["Circle"].astype(str)
+
+            # Build lookup dict: Circle → (P1, P2)
+            platter_dict = {
+                str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]))
+                for _, row in platter_data.iterrows()
+            }
+
+            # Find circles in new data that are NOT in existing sheet → add as new rows
+            existing_circles = set(existing_df["Circle"].tolist())
+            new_circles = [c for c in platter_dict if c not in existing_circles]
+
+            if new_circles:
+                print(f"New circles found, adding rows: {new_circles}")
+                empty_row = {col: "0" for col in existing_df.columns}
+                new_rows = []
+                for circle in new_circles:
+                    row = empty_row.copy()
+                    row["Date"]   = today_str
+                    row["Circle"] = circle
+                    new_rows.append(row)
+                new_rows_df = pd.DataFrame(new_rows)
+                existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
+
+            # Add new time-stamped columns for ALL rows (existing + newly added)
+            existing_df[new_p1_col] = existing_df["Circle"].map(
+                lambda c: platter_dict.get(c, ("0", "0"))[0]
+            )
+            existing_df[new_p2_col] = existing_df["Circle"].map(
+                lambda c: platter_dict.get(c, ("0", "0"))[1]
+            )
+
+            # Push Total row to the bottom before writing
+            existing_df = sort_total_to_bottom(existing_df)
+
+            # Write back updated data
+            updated_rows = [existing_df.columns.tolist()] + existing_df.values.tolist()
+            middle_rows = sorted(updated_rows[1:len(updated_rows)-1],key = lambda x: x[1])
+            new_rows = [updated_rows[0]] + middle_rows + [updated_rows[-1]]
+            print("Updated rows are:", new_rows)
+            # print("Updated rows are:", updated_rows)
+            worksheet.clear()
+            worksheet.update(new_rows)
+
+        show_popup("Tracker updated successfully!", type="success")
+
+    except Exception as e:
+        print(f"Error in tracker function is: {e}")
+        show_popup(f"Error in tracker function is: {e}", type="error")
+
+def statuswise_platter(merged_data):
+    try:
+        spreadsheet = connect_gsheet()
+
         summary = merged_data.groupby("status_code").agg({
             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
         }).reset_index()
@@ -200,21 +303,41 @@ def statuswise_platter(merged_data, writer):
         total_row["Status"] = "Total"
         summary = pd.concat([summary, total_row], ignore_index=True)
 
-        summary.to_excel(writer, sheet_name="Statuswise Platter", index=False, startrow=1)
-        apply_formatting(writer.book, writer.sheets["Statuswise Platter"], summary, "Statuswise Platter And Targets")
+        # To write data in google sheet
+        if summary is not None and not summary.empty:
+            # Open or create the worksheet
+            try:
+                worksheet = spreadsheet.worksheet("Statuswise Platter")
+            except gspread.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet("Statuswise Platter", rows=5000, cols=30)
+            
+            # Clear existing data and write fresh
+            worksheet.clear()
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
+        
+        show_popup("Statuswise platter report created successfully!", type = "success")        
     except Exception as e:
         print(f"Error in statuswise_platter function : {e}")
-        return f"Error in statuswise_platter function : {e}"
+        show_popup(f"Error in statuswise_platter is : {e}", type = "error")
 
-def billing_code_status_platter(merged_data, writer):
+def billing_code_status_platter(merged_data):
     try:
+        spreadsheet = connect_gsheet()
+
+        # To write data in google sheet
+        try:
+            worksheet = spreadsheet.worksheet("Billing Code")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("Billing Code", rows=5000, cols=30)
+            
+        # Clear existing data and write fresh
+        worksheet.clear()
+
         summary = merged_data[merged_data["status_code"].str.upper().str.strip() == "BILLING_CODE_PROBLEM"]
         
-        # if merged_data.empty:
-            # worksheet = writer.book.add_worksheet("Billing Code")
-            # fmt_msg = writer.book.add_format({'bold': True, 'font_color': 'red', 'font_size': 12})
-            # worksheet.write('A1', "No data found for Billing Code Problem.", fmt_msg)
-            # return
         if not merged_data.empty:
             summary = summary.groupby("circle").agg({
                 "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
@@ -235,16 +358,31 @@ def billing_code_status_platter(merged_data, writer):
             total_row = pd.DataFrame([totals])
             total_row["Circle"] = "Total"
             summary = pd.concat([summary, total_row], ignore_index=True)
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
 
-            summary.to_excel(writer, sheet_name="Billing Code", index=False, startrow=1)
-            apply_formatting(writer.book, writer.sheets["Billing Code"], summary, "Billing Code Problem")
+            show_popup("billing code platter report created successfully!", type = "success")
     except Exception as e:
         print(f"Error in billing code status platter function: {e}")
-        return f"Error in billing code status platter function: {e}"
+        show_popup(f"Error in billing code status platter function : {e}", type = "error")
 
-def pdna_status_platter(merged_data, writer):
+def pdna_status_platter(merged_data):
     try:
-        merged_data = merged_data[merged_data["status_code"].str.upper().str.strip() == "PDNA"]
+        spreadsheet = connect_gsheet()
+
+        # To write data in google sheet
+        # Open or create the worksheet
+        try:
+            worksheet = spreadsheet.worksheet("PDNA")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("PDNA", rows=5000, cols=30)
+            
+        # Clear existing data and write fresh
+        worksheet.clear()
+
+        merged_data = merged_data[merged_data["status_code"].str.upper().str.strip() == "PART_DECLARED_NOT_AVAILABLE"]
         
         if not merged_data.empty:
             summary = merged_data.groupby("circle").agg({
@@ -266,15 +404,30 @@ def pdna_status_platter(merged_data, writer):
             total_row = pd.DataFrame([totals])
             total_row["Circle"] = "Total"
             summary = pd.concat([summary, total_row], ignore_index=True)
-
-            summary.to_excel(writer, sheet_name="PDNA", index=False, startrow=1)
-            apply_formatting(writer.book, writer.sheets["PDNA"], summary, "PDNA")
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
+            
+            show_popup("PDNA platter report created successfully!", type = "success")
     except Exception as e:
         print(f"Error in pdna_status_platter function is : {e}")
-        return f"Error in pdna_status_platter function is : {e}"
+        show_popup(f"Error in pdna_status_platter function : {e}", type = "error")
     
-def ran_cn_due_status_platter(merged_data, writer):
+def ran_cn_due_status_platter(merged_data):
     try:
+        spreadsheet = connect_gsheet()
+
+        # To write data in google sheet
+        # Open or create the worksheet
+        try:
+            worksheet = spreadsheet.worksheet("RAN_CN_DUE")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("RAN_CN_DUE", rows=5000, cols=30)
+
+        # Clear existing data and write fresh
+        worksheet.clear()
+        
         merged_data = merged_data[(merged_data["status_code"].str.upper().str.strip() == "RAN_C_CN_DUE") | (merged_data["status_code"].str.upper().str.strip() == "RAN_D_CN_DUE")]
         
         if not merged_data.empty:
@@ -298,19 +451,36 @@ def ran_cn_due_status_platter(merged_data, writer):
             total_row["Circle"] = "Total"
             summary = pd.concat([summary, total_row], ignore_index=True)
 
-            summary.to_excel(writer, sheet_name="RAN_CN_DUE", index=False, startrow=1)
-            apply_formatting(writer.book, writer.sheets["RAN_CN_DUE"], summary, "RAN_C/D_CN_DUE Calls On The Platter And Targets")
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
+            
+            show_popup("RAN_CN_DUE report created successfully!", type = "success")
     except Exception as e:
         print(f"Error in ran_cn_due_status_platter function : {e}")
-        return f"Error in ran_cn_due_status_platter function : {e}"
+        show_popup(f"Error in RAN_CN_DUE report function : {e}", type = "error")
 
-def dealerwise_status_platter(merged_data,writer):
+def dealerwise_platter(merged_data):
     try:
+        spreadsheet = connect_gsheet()
+
+        # To write data in google sheet
+        # Open or create the worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Dealer Platter")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("Dealer Platter", rows=5000, cols=30)
+
+        # Clear existing data and write fresh
+        worksheet.clear()
+
         filtered_data = merged_data[
-    (merged_data["status_code"].str.upper().str.strip().isin(["RAN_C_CN_DUE", "RAN_D_CN_DUE"])) |
-    (~merged_data["status_code"].str.upper().str.strip().isin(["RAN_C_CN_DUE", "RAN_D_CN_DUE"]) & 
-     (merged_data["customer_type"].str.lower().str.strip() == "dealer"))
-]
+        (merged_data["status_code"].str.upper().str.strip().isin(["RAN_C_CN_DUE", "RAN_D_CN_DUE"])) |
+        (~merged_data["status_code"].str.upper().str.strip().isin(["RAN_C_CN_DUE", "RAN_D_CN_DUE"]) & 
+        (merged_data["customer_type"].str.lower().str.strip() == "dealer"))
+        ]
+
         if not filtered_data.empty:
             summary = filtered_data.groupby("circle").agg({
                 "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
@@ -332,18 +502,274 @@ def dealerwise_status_platter(merged_data,writer):
             total_row["Circle"] = "Total"
             summary = pd.concat([summary, total_row], ignore_index=True)
 
-            summary.to_excel(writer, sheet_name="Dealer Platter", index=False, startrow=1)
-            apply_formatting(writer.book, writer.sheets["Dealer Platter"], summary, "Dealer Circlewise Platter And Targets")
-    except Exception as e:
-        print(f"Error in dealerwise_status_platter function : {e}")
-        return f"Error in dealerwise_status_platter function : {e}"
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
 
-# --- Main Execution ---
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Please provide the raw file path as an argument.")
-    else:
-        raw_file = sys.argv[1]
+            show_popup("dealerwise_platter report created successfully!", type = "success")
+    except Exception as e:
+        print(f"Error in dealerwise_platter function : {e}")
+        show_popup(f"Error in dealerwise_platter report function : {e}", type = "error")
+
+def apply_formatting(workbook, worksheet, summary, title_text):
+    try:
+        fmt_header     = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center'})
+        fmt_main_title = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center', 'font_size': 14})
+        fmt_red        = workbook.add_format({'bold': True, 'bg_color': "#FF0000", 'border': 1, 'align': 'center'})
+        fmt_orange     = workbook.add_format({'bg_color': "#FFBF00", 'border': 1, 'align': 'center', 'bold': True})
+        fmt_green      = workbook.add_format({'bg_color': "#8BF58B", 'border': 1, 'align': 'center', 'bold': True})
+        fmt_white      = workbook.add_format({'border': 1, 'align': 'center', 'bold': True})
+
+        # Single format for entire Total row
+        fmt_total = workbook.add_format({'bold': True, 'bg_color': '#1F4E79', 'font_color': '#FFFFFF', 'border': 1, 'align': 'center'})
+
+        # 1. Write Main Title
+        report_date = datetime.now().strftime("%d-%b-%Y")
+        worksheet.merge_range('A1:F1', f"{title_text} --- {report_date}", fmt_main_title)
+
+        total_row_idx = len(summary) - 1
+
+        # 2. Apply Data Formatting
+        for row_num in range(2, len(summary) + 2):
+            df_row_idx = row_num - 2
+            is_total   = (df_row_idx == total_row_idx)
+
+            for col_num in range(6):
+                value = summary.iloc[df_row_idx, col_num]
+
+                if is_total:
+                    # Same color for all 6 columns in total row
+                    worksheet.write(row_num, col_num, value, fmt_total)
+                else:
+                    fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
+                    worksheet.write(row_num, col_num, value, fmt)
+
+        # 3. Write Column Headers
+        for col_num, value in enumerate(summary.columns.values):
+            worksheet.write(1, col_num, value, fmt_header)
+
+        worksheet.set_column('A:F', 18)
+
+    except Exception as e:
+        print(f"Error in Formatting {worksheet} is : {e}")
+        show_popup(f"Error in Formatting {worksheet} is : {e}", type="error")
+
+def apply_tracker_excel_formatting(workbook, worksheet, df, title_text):
+    try:
+        # --- Formats ---
+        fmt_title   = workbook.add_format({'bold': True, 'bg_color': "#EA98B9", 'border': 1, 'align': 'center', 'font_size': 14})
+        fmt_header  = workbook.add_format({'bold': True, 'bg_color': "#8CB2ED", 'border': 1, 'align': 'center'})
+        fmt_default = workbook.add_format({'bold': True, 'bg_color': "#F2E7DE", 'border': 1, 'align': 'center'})
+        fmt_green   = workbook.add_format({'bg_color': '#8BF58B', 'border': 1, 'align': 'center', 'bold': True})
+        fmt_blue    = workbook.add_format({'bg_color': '#63B3ED', 'border': 1, 'align': 'center', 'bold': True})
+
+        # Single format for entire Total row
+        fmt_total   = workbook.add_format({'bold': True, 'bg_color': '#1F4E79', 'font_color': '#FFFFFF', 'border': 1, 'align': 'center'})
+
+        headers  = df.columns.tolist()
+        num_cols = len(headers)
+        total_row_idx = len(df) - 1   # Last row = Total row
+
+        # --- Merge title row across all columns ---
+        last_col_letter = chr(ord('A') + num_cols - 1)
+        report_date = datetime.now().strftime("%d-%b-%Y")
+        worksheet.merge_range(f'A1:{last_col_letter}1', f"{title_text} --- {report_date}", fmt_title)
+
+        # --- Write headers in row 2 ---
+        for col_idx, col_name in enumerate(headers):
+            worksheet.write(1, col_idx, col_name, fmt_header)
+
+        # --- Find P1 and P2 column indices ---
+        p1_cols = [i for i, h in enumerate(headers) if h.endswith("P1")]
+        p2_cols = [i for i, h in enumerate(headers) if h.endswith("P2")]
+
+        # --- Write data rows with conditional formatting ---
+        for row_idx in range(len(df)):
+            is_total = (row_idx == total_row_idx)   # Check if Total row
+
+            for col_idx in range(num_cols):
+                value = df.iloc[row_idx, col_idx]
+
+                # Total row → same color for all columns
+                if is_total:
+                    fmt = fmt_total
+
+                elif col_idx in p1_cols:
+                    pair_idx = p1_cols.index(col_idx)
+                    p2_idx   = p2_cols[pair_idx] if pair_idx < len(p2_cols) else None
+                    try:
+                        p1_val = int(float(value))
+                        p2_val = int(float(df.iloc[row_idx, p2_idx])) if p2_idx else 1
+                    except:
+                        p1_val, p2_val = 1, 1
+
+                    if p1_val == 0 and p2_val == 0:
+                        fmt = fmt_green
+                    elif p1_val == 0:
+                        fmt = fmt_blue
+                    else:
+                        fmt = fmt_default
+
+                elif col_idx in p2_cols:
+                    pair_idx = p2_cols.index(col_idx)
+                    p1_idx   = p1_cols[pair_idx] if pair_idx < len(p1_cols) else None
+                    try:
+                        p2_val = int(float(value))
+                        p1_val = int(float(df.iloc[row_idx, p1_idx])) if p1_idx else 1
+                    except:
+                        p1_val, p2_val = 1, 1
+
+                    if p1_val == 0 and p2_val == 0:
+                        fmt = fmt_green
+                    # elif p1_val == 0:
+                    #     fmt = fmt_blue
+                    else:
+                        fmt = fmt_default
+
+                else:
+                    fmt = fmt_default
+
+                worksheet.write(row_idx + 2, col_idx, str(value), fmt)
+
+        # --- Set column widths ---
+        worksheet.set_column(0, 0, 12)
+        worksheet.set_column(1, 1, 15)
+        worksheet.set_column(2, num_cols - 1, 12)
+
+    except Exception as e:
+        print(f"Error in apply_tracker_excel_formatting: {e}")
+        show_popup(f"Error in tracker Excel formatting: {e}", type="error")
+
+def fetch_and_format_report():
+    try:
+        spreadsheet = connect_gsheet()
+        output = io.BytesIO()
+
+        # Regular sheets with standard formatting
+        sheet_configs = [
+            {"sheet": "Daily Circlewise Platter", "title": "All Circlewise Platter And Targets"},
+            {"sheet": "Statuswise Platter",        "title": "Statuswise Platter And Targets"},
+            {"sheet": "Billing Code",              "title": "Billing Code Problem"},
+            {"sheet": "PDNA",                      "title": "PDNA"},
+            {"sheet": "RAN_CN_DUE",                "title": "RAN_C/D_CN_DUE Calls On The Platter And Targets"},
+            {"sheet": "Dealer Platter",            "title": "Dealer Circlewise Platter And Targets"},
+        ]
+
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+
+            # --- Standard sheets ---
+            for config in sheet_configs:
+                sheet_name = config["sheet"]
+                title_text = config["title"]
+                try:
+                    ws       = spreadsheet.worksheet(sheet_name)
+                    raw_data = ws.get_all_values()
+
+                    if not raw_data or len(raw_data) < 2:
+                        print(f"No data found in sheet: {sheet_name}")
+                        continue
+
+                    df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
+
+                    # Convert numeric columns
+                    for col in df.columns[1:]:
+                        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+
+                    df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=1)
+                    apply_formatting(writer.book, writer.sheets[sheet_name], df, title_text)
+                    print(f"✅ Sheet written: {sheet_name}")
+
+                except gspread.WorksheetNotFound:
+                    print(f"⚠️ Sheet not found, skipping: {sheet_name}")
+                    continue
+
+            # --- Tracker sheet (special formatting) ---
+            try:
+                tracker_ws   = spreadsheet.worksheet("Tracker")
+                tracker_data = tracker_ws.get_all_values()
+
+                if tracker_data and len(tracker_data) >= 2:
+                    tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
+
+                    tracker_df.to_excel(writer, sheet_name="Tracker", index=False, startrow=1)
+
+                    # ✅ Use special tracker formatting
+                    apply_tracker_excel_formatting(
+                        writer.book,
+                        writer.sheets["Tracker"],
+                        tracker_df,
+                        "Daily Tracker"
+                    )
+                    print("✅ Tracker sheet written")
+                else:
+                    print("⚠️ No data in Tracker sheet")
+
+            except gspread.WorksheetNotFound:
+                print("⚠️ Tracker sheet not found, skipping")
+
+        show_popup("Platter report ready to download!", type="success")
+        return output.getvalue()
+
+    except Exception as e:
+        print(f"Error in fetch_and_format_report: {e}")
+        show_popup(f"Error generating report: {e}", type="error")
+        return None
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.message import EmailMessage
+
+def send_email(sender_email, sender_password, recipient_email):
+    # Create a multipart message object
+    msg = MIMEMultipart("alternative")
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    msg["Subject"] = "Daily Platter Report"
+
+    # Create email
+    text = "This is plain text"
+    html = f"<html><body><h2>PFA</h2></body></html>"
+    part1 = MIMEText(text, "plain")
+    part2 = MIMEText(html, "html")
+    msg.attach(part1)
+    msg.attach(part2)
+
+    # SMTP server settings
+    smtp_server = "smtp-mail.outlook.com"
+    smtp_port = 587
+
+    try:
+        # Create a secured SSL/TLS connection
+        server = smtplib.SMTP(smtp_server,smtp_port)
+        server.starttls()
+
+        # Login to your outlook email
+        server.login(send_email, sender_password)
+
+        # send email
+        server.sendmail(sender_email,recipient_email, msg.as_string())
+
+        print("Email sent successfully")
+    except smtplib.SMTPException as e:
+        print(f"Error in sending email", str(e))
+    finally:
+        # Close connection
+        server.quit()
+
+sender_email = "business.analyst@amstradworld.com" 
+sender_password = "Rutuja@123"
+recipient_email = "business.analyst@amstradworld.com"
+
+# send_email(sender_email, sender_password, recipient_email)
+
+# # --- Main Execution ---
+# if __name__ == "__main__":
+#     if len(sys.argv) < 2:
+#         print("Please provide the raw file path as an argument.")
+#     else:
+#         raw_file = sys.argv[1]
         # status_file = r"D:\Amstrad\Service\Statuswise_norms_teams_data.xlsx"
         # out_name = f"service_daily_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
