@@ -11,6 +11,8 @@ from google.oauth2.service_account import Credentials
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+
 
 # To create connection
 def get_gsheet_conn():
@@ -74,7 +76,7 @@ def func1(raw_file):
         data = pd.read_excel(raw_file)
         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
         # To select the subset of the dataframe from the complete data
-        selected_columns = ["service_id","circle", "customer_type", "call_date", "updatedate", "status_code"]
+        selected_columns = ["service_id","customer_name","company_name","circle", "customer_type", "call_date", "updatedate", "status_code","phone1","provider_phone1"]
         data = data[selected_columns]
         data["service_id"] = data["service_id"].astype(str)
         data["call_date"] = pd.to_datetime(data["call_date"]).dt.normalize()
@@ -762,6 +764,26 @@ def fetch_and_format_report():
             except gspread.WorksheetNotFound:
                 print("⚠️ Tracker sheet not found, skipping")
 
+            # ----- Detailed Raw Data -----
+            try:
+                raw_ws = spreadsheet.worksheet("Detailed_Data")
+                raw_data = raw_ws.get_all_values()
+                
+                if raw_data and len(raw_data) >= 2:
+                    raw_df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
+
+                    raw_df = raw_df[["circle","status_code","service_id", "customer_name","phone1","company_name","provider_phone1","category"]]
+
+                    raw_df = raw_df[(raw_df["category"] == "Red Call") | (raw_df["category"] == "Encroaching1")]
+
+                    raw_df.to_excel(writer, sheet_name="Raw_Data", index=False)
+                    print("✅ Raw Data sheet written")
+                else:
+                    print("No raw data found !!")
+
+            except  gspread.WorksheetNotFound:
+                print("⚠️ Detailed_Data sheet not found, skipping")
+
         show_popup("Platter report ready to download!", type="success")
         return output.getvalue()
 
@@ -770,84 +792,6 @@ def fetch_and_format_report():
         show_popup(f"Error generating report: {e}", type="error")
         return None
 
-
-
-# def send_email(sender_email, app_password, recipient_email):
-#     msg = MIMEMultipart("alternative")
-#     msg['From'] = sender_email
-#     msg['To'] = recipient_email
-#     msg["Subject"] = "Daily Platter Report"
-
-#     text = "This is plain text"
-#     html = "<html><body><h2>Hello</h2></body></html>"
-
-#     msg.attach(MIMEText(text, "plain"))
-#     msg.attach(MIMEText(html, "html"))
-
-#     smtp_server = "smtp.gmail.com"
-#     smtp_port = 587
-
-#     try:
-#         print("Setting server....")
-#         server = smtplib.SMTP(smtp_server, smtp_port)
-#         server.ehlo()
-#         server.starttls()
-#         server.ehlo()
-
-#         print("Logging in...")
-#         server.login(sender_email, app_password)
-
-#         print("Sending email...")
-#         server.sendmail(sender_email, recipient_email, msg.as_string())
-
-#         print("✅ Email sent successfully!")
-
-#     except Exception as e:
-#         print(f"❌ Error: {e}")
-
-#     finally:
-#         server.quit()
-
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-
-
-# def send_email(sender_email, app_password, recipient_email,cc_emails, file_bytes):
-#     msg = MIMEMultipart()
-#     msg['From'] = sender_email
-#     msg['To'] = recipient_email
-#     msg["Cc"] = ", ".join(cc_emails)
-#     msg["Subject"] = "Daily Platter Report"
-
-#     # Email body
-#     html = "<html><body><h2>Hello, PFA report.</h2></body></html>"
-#     msg.attach(MIMEText(html, "html"))
-
-#     # 📎 Attach Excel file
-#     attachment = MIMEApplication(file_bytes, _subtype="xlsx")
-#     attachment.add_header(
-#         'Content-Disposition',
-#         'attachment',
-#         filename="service_platter_report.xlsx"
-#     )
-#     msg.attach(attachment)
-
-#     try:
-#         server = smtplib.SMTP("smtp.gmail.com", 587)
-#         server.ehlo()
-#         server.starttls()
-#         server.login(sender_email, app_password)
-
-#         server.send_message(msg)
-#         print("✅ Email sent with attachment!")
-
-#     except Exception as e:
-#         print(f"❌ Error: {e}")
-
-#     finally:
-#         server.quit()
 
 def send_email(sender_email, app_password, recipient_email, cc_emails, file_bytes):
     msg = MIMEMultipart()
