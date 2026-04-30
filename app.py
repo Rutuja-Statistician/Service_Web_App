@@ -11,7 +11,7 @@ from main import (
     pdna_status_platter,
     ran_cn_due_status_platter,
     dealerwise_platter,          # ← make sure this matches main.py exactly
-    fetch_and_format_report
+    fetch_and_format_report,send_email
 )
 
 from src.sidebar import render_sidebar
@@ -69,12 +69,33 @@ if page == "upload":
     # --- Download Section (independent of upload) ---
     st.subheader("📥 Email Reports")
 
-# --- PAGE: View Dashboard ---
-elif page == "dashboard":
-    st.header("📊 View Dashboard")
-    st.info("Dashboard coming soon...")
+    if st.button("📧 Send Email Report"):
+        with st.spinner("Generating and sending email..."):
+            report_data = fetch_and_format_report()
 
-# --- PAGE: View Report ---
-elif page == "reports":
-    st.header("📌 View Report")
-    st.info("Reports coming soon...")
+            sender_email = st.secrets["connections"]["gsheets"]["sender_email"]
+            sender_password = st.secrets["connections"]["gsheets"]["sender_password"]
+            recipient_email = st.secrets["connections"]["gsheets"]["recipient_email"]
+            cc_emails = st.secrets["connections"]["gsheets"]["cc_email"]
+            print(cc_emails)
+            if report_data:
+                send_email(
+                    sender_email,
+                    sender_password,
+                    recipient_email,
+                    cc_emails,
+                    report_data
+                )
+                st.success("✅ Email sent successfully!")
+            else:
+                st.error("❌ Failed to generate report")
+
+# # --- PAGE: View Dashboard ---
+# elif page == "dashboard":
+#     st.header("📊 View Dashboard")
+#     st.info("Dashboard coming soon...")
+
+# # --- PAGE: View Report ---
+# elif page == "reports":
+#     st.header("📌 View Report")
+#     st.info("Reports coming soon...")
