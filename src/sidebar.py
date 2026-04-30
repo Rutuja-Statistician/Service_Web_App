@@ -106,8 +106,8 @@ def render_sidebar():
         # Navigation
         # st.markdown('<p class="sidebar-subtitle"> Navigation</p>', unsafe_allow_html=True)
         btn_upload    = st.button("📤  Upload & Create Report")
-        btn_dashboard = st.button("📊  View Dashboard")
-        btn_reports = st.button("📌 View Report")
+        # btn_dashboard = st.button("📊  View Dashboard")
+        # btn_reports = st.button("📌 View Report")
 
         st.divider()
 
@@ -117,10 +117,10 @@ def render_sidebar():
     # Page state
     if btn_upload:
         st.session_state["page"] = "upload"
-    elif btn_dashboard:
-        st.session_state["page"] = "dashboard"
-    elif btn_reports:
-        st.session_state["page"] = "report"
+    # elif btn_dashboard:
+    #     st.session_state["page"] = "dashboard"
+    # elif btn_reports:
+    #     st.session_state["page"] = "report"
 
     if "page" not in st.session_state:
         st.session_state["page"] = "upload"
