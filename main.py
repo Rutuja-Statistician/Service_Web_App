@@ -8,10 +8,13 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 import gspread
 from google.oauth2.service_account import Credentials
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # To create connection
 def get_gsheet_conn():
-    """Create authenticated gspread connection using secrets."""
+
     creds_dict = {
         "type": st.secrets["connections"]["gsheets"]["type"],
         "project_id": st.secrets["connections"]["gsheets"]["project_id"],
@@ -767,6 +770,132 @@ def fetch_and_format_report():
         show_popup(f"Error generating report: {e}", type="error")
         return None
 
+
+
+# def send_email(sender_email, app_password, recipient_email):
+#     msg = MIMEMultipart("alternative")
+#     msg['From'] = sender_email
+#     msg['To'] = recipient_email
+#     msg["Subject"] = "Daily Platter Report"
+
+#     text = "This is plain text"
+#     html = "<html><body><h2>Hello</h2></body></html>"
+
+#     msg.attach(MIMEText(text, "plain"))
+#     msg.attach(MIMEText(html, "html"))
+
+#     smtp_server = "smtp.gmail.com"
+#     smtp_port = 587
+
+#     try:
+#         print("Setting server....")
+#         server = smtplib.SMTP(smtp_server, smtp_port)
+#         server.ehlo()
+#         server.starttls()
+#         server.ehlo()
+
+#         print("Logging in...")
+#         server.login(sender_email, app_password)
+
+#         print("Sending email...")
+#         server.sendmail(sender_email, recipient_email, msg.as_string())
+
+#         print("✅ Email sent successfully!")
+
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+
+#     finally:
+#         server.quit()
+
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+
+
+# def send_email(sender_email, app_password, recipient_email,cc_emails, file_bytes):
+#     msg = MIMEMultipart()
+#     msg['From'] = sender_email
+#     msg['To'] = recipient_email
+#     msg["Cc"] = ", ".join(cc_emails)
+#     msg["Subject"] = "Daily Platter Report"
+
+#     # Email body
+#     html = "<html><body><h2>Hello, PFA report.</h2></body></html>"
+#     msg.attach(MIMEText(html, "html"))
+
+#     # 📎 Attach Excel file
+#     attachment = MIMEApplication(file_bytes, _subtype="xlsx")
+#     attachment.add_header(
+#         'Content-Disposition',
+#         'attachment',
+#         filename="service_platter_report.xlsx"
+#     )
+#     msg.attach(attachment)
+
+#     try:
+#         server = smtplib.SMTP("smtp.gmail.com", 587)
+#         server.ehlo()
+#         server.starttls()
+#         server.login(sender_email, app_password)
+
+#         server.send_message(msg)
+#         print("✅ Email sent with attachment!")
+
+#     except Exception as e:
+#         print(f"❌ Error: {e}")
+
+#     finally:
+#         server.quit()
+
+def send_email(sender_email, app_password, recipient_email, cc_emails, file_bytes):
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+
+    # ✅ Ensure recipient_email is list
+    if isinstance(recipient_email, str):
+        recipient_email = [recipient_email]
+
+    if isinstance(cc_emails, str):
+        cc_emails = [cc_emails]
+
+    # ✅ Set headers properly
+    msg['To'] = ", ".join(recipient_email)
+    msg['Cc'] = ", ".join(cc_emails)
+    msg["Subject"] = "Daily Platter Report"
+
+    # Email body
+    html = "<html><body>Hello, <p>PFA report.</p></body></html>"
+    msg.attach(MIMEText(html, "html"))
+
+    # 📎 Attachment
+    attachment = MIMEApplication(file_bytes, _subtype="xlsx")
+    attachment.add_header(
+        'Content-Disposition',
+        'attachment',
+        filename="service_platter_report.xlsx"
+    )
+    msg.attach(attachment)
+
+    # ✅ Combine all recipients
+    all_recipients = recipient_email + cc_emails
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.ehlo()
+        server.starttls()
+        server.login(sender_email, app_password)
+
+        server.sendmail(sender_email, all_recipients, msg.as_string())
+
+        print("✅ Email sent with attachment!")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+    finally:
+        server.quit()
 
 # # --- Main Execution ---
 # if __name__ == "__main__":
