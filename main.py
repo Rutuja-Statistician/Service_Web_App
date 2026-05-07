@@ -777,6 +777,16 @@ def fetch_and_format_report():
 
                     raw_df = raw_df[(raw_df["category"] == "Red Call") | (raw_df["category"] == "Encroaching1")]
 
+                    raw_df = raw_df[raw_df["category"].isin(["Red Call", "Encroaching1"])]
+
+                    raw_df["category"] = pd.Categorical(
+                        raw_df["category"],
+                        categories=["Red Call", "Encroaching1"],
+                        ordered=True
+                    )
+
+                    raw_df= raw_df.sort_values("category")
+
                     raw_df.to_excel(writer, sheet_name="Raw_Data", index=False)
                     print("✅ Raw Data sheet written")
                 else:
@@ -798,14 +808,14 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
     msg = MIMEMultipart()
     msg['From'] = sender_email
 
-    # ✅ Ensure recipient_email is list
+    # Ensure recipient_email is list
     if isinstance(recipient_email, str):
         recipient_email = [recipient_email]
 
     if isinstance(cc_emails, str):
         cc_emails = [cc_emails]
 
-    # ✅ Set headers properly
+    # Set headers properly
     msg['To'] = ", ".join(recipient_email)
     msg['Cc'] = ", ".join(cc_emails)
     msg["Subject"] = "Daily Platter Report"
@@ -823,15 +833,23 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
     )
     msg.attach(attachment)
 
-    # ✅ Combine all recipients
+    # Combine all recipients
     all_recipients = recipient_email + cc_emails
 
     try:
+        # server = smtplib.SMTP("smtp.gmail.com", 587)
+        # server.ehlo()
+        # server.starttls()
+        # server.login(sender_email, app_password)
+        # print("Login Successfull...!!!")
+        # server.sendmail(sender_email, all_recipients, msg.as_string())
+
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.ehlo()
         server.starttls()
+        server.ehlo()
         server.login(sender_email, app_password)
-
+        print("Login successful...!!!")
         server.sendmail(sender_email, all_recipients, msg.as_string())
 
         print("✅ Email sent with attachment!")
@@ -840,26 +858,8 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
         print(f"❌ Error: {e}")
 
     finally:
-        server.quit()
+        try:
+            server.quit()
+        except:
+            pass
 
-# # --- Main Execution ---
-# if __name__ == "__main__":
-#     if len(sys.argv) < 2:
-#         print("Please provide the raw file path as an argument.")
-#     else:
-#         raw_file = sys.argv[1]
-        # status_file = r"D:\Amstrad\Service\Statuswise_norms_teams_data.xlsx"
-        # out_name = f"service_daily_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-
-        # final_df = func1(raw_file)
-        # print("The shape of final_df is :", final_df.shape)
-        # if final_df is not None:
-        #     # We open the writer ONCE here and pass it to all functions
-        #     with pd.ExcelWriter(out_name, engine="xlsxwriter") as writer:
-        #         circlewise_platter(final_df, writer)
-        #         statuswise_platter(final_df, writer)
-        #         billing_code_status_platter(final_df, writer)
-        #         pdna_status_platter(final_df,writer)
-        #         ran_cn_due_status_platter(final_df,writer)
-        #         dealerwise_status_platter(final_df,writer)
-        #     print(f"Process Complete. Report saved: {out_name}")
