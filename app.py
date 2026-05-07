@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import pytz
 from datetime import datetime
 
 from main import (
@@ -58,10 +59,14 @@ if page == "upload":
             report_data = fetch_and_format_report()
 
             if report_data:
+                IST = pytz.timezone('Asia/Kolkata')
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                time_str  = datetime.now(IST).strftime("%H:%M")
+                print("The time string is:", time_str)
                 st.download_button(
                     label="⬇️ Click here to Download",
                     data=report_data,
-                    file_name=f"service_platter_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    file_name=f"service_platter_report_{datetime.now(IST).strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
