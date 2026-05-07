@@ -127,7 +127,8 @@ def func1(raw_file):
         if merged_data is not None and not merged_data.empty:
             
             # Convert DataFrame to list of lists
-            data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+            # data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+            data_to_write = [merged_data.columns.tolist()] + merged_data.fillna("").astype(str).values.tolist()
             detailData_worksheet.update(data_to_write)
             
             show_popup("Data stored in the database", type = "success")
