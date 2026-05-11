@@ -859,6 +859,7 @@ def fetch_and_format_report():
 
 
 def send_email(sender_email, app_password, recipient_email, cc_emails, file_bytes):
+    IST = pytz.timezone('Asia/Kolkata')
     msg = MIMEMultipart()
     msg['From'] = sender_email
 
@@ -883,7 +884,8 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
     attachment.add_header(
         'Content-Disposition',
         'attachment',
-        filename="service_platter_report.xlsx"
+        # filename="service_platter_report.xlsx"
+        filename=f"service_platter_report_{datetime.now(IST).strftime('%Y%m%d_%H%M')}.xlsx"
     )
     msg.attach(attachment)
 
