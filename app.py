@@ -13,7 +13,8 @@ from main import (
     ran_cn_due_status_platter,
     dealerwise_platter,          
     fetch_and_format_report,
-    send_email
+    send_email,
+    work_in_progress_status_platter,
 )
 
 from src.sidebar import render_sidebar
@@ -41,6 +42,7 @@ if page == "upload":
                         billing_code_status_platter(final_df)
                         pdna_status_platter(final_df)
                         ran_cn_due_status_platter(final_df)
+                        work_in_progress_status_platter(final_df)
                         dealerwise_platter(final_df)
 
                         st.success("✅ All data updated in Database!")
@@ -62,7 +64,6 @@ if page == "upload":
                 IST = pytz.timezone('Asia/Kolkata')
                 today_str = datetime.now().strftime("%Y-%m-%d")
                 time_str  = datetime.now(IST).strftime("%H:%M")
-                print("The time string is:", time_str)
                 st.download_button(
                     label="⬇️ Click here to Download",
                     data=report_data,
@@ -95,13 +96,3 @@ if page == "upload":
                 st.success("✅ Email sent successfully!")
             else:
                 st.error("❌ Failed to generate report")
-
-# # --- PAGE: View Dashboard ---
-# elif page == "dashboard":
-#     st.header("📊 View Dashboard")
-#     st.info("Dashboard coming soon...")
-
-# # --- PAGE: View Report ---
-# elif page == "reports":
-#     st.header("📌 View Report")
-#     st.info("Reports coming soon...")
