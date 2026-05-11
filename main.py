@@ -459,6 +459,58 @@ def pdna_status_platter(merged_data):
         print(f"Error in pdna_status_platter function is : {e}")
         show_popup(f"Error in pdna_status_platter function : {e}", type = "error")
     
+def work_in_progress_status_platter(merged_data):
+    try:
+        spreadsheet = connect_gsheet()
+
+        # To write data in google sheet
+        # Open or create the worksheet
+        try:
+            worksheet = spreadsheet.worksheet("WORK_IN_PROGRESS")
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet("WORK_IN_PROGRESS", rows=5000, cols=30)
+
+        # Clear existing data and write fresh
+        worksheet.clear()
+        
+        merged_data = merged_data[(merged_data["status_code"].str.upper().str.strip() == "RAN_C_CN_DUE") | (merged_data["status_code"].str.upper().str.strip() == "WORK_IN_PROGRESS")]
+        
+        if not merged_data.empty:
+            summary = merged_data.groupby("circle").agg({
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+            }).reset_index()
+
+            summary = summary.rename(columns={
+                "circle": "Circle", "red_call_flag": "Red Call",
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+            })
+
+            summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
+            summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            summary = summary[col_order]
+
+            # Droping the rows where Platter2 is zero
+            summary= summary[summary["Platter2"] != 0]
+
+            # Sort by Platter1 descending BEFORE adding Total row
+            summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+            
+            totals = summary.select_dtypes(include='number').sum()
+            total_row = pd.DataFrame([totals])
+            total_row["Circle"] = "Total"
+            summary = pd.concat([summary, total_row], ignore_index=True)
+            
+            # Convert DataFrame to list of lists
+            data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+            worksheet.update(data_to_write)
+            
+            show_popup("WORK_IN_PROGRESS report created successfully!", type = "success")
+    except Exception as e:
+        print(f"Error in ran_cn_due_status_platter function : {e}")
+        show_popup(f"Error in WORK_IN_PROGRESS report function : {e}", type = "error")
+
 def ran_cn_due_status_platter(merged_data):
     try:
         spreadsheet = connect_gsheet()
@@ -511,6 +563,7 @@ def ran_cn_due_status_platter(merged_data):
     except Exception as e:
         print(f"Error in ran_cn_due_status_platter function : {e}")
         show_popup(f"Error in RAN_CN_DUE report function : {e}", type = "error")
+
 
 def dealerwise_platter(merged_data):
     try:
@@ -710,6 +763,7 @@ def fetch_and_format_report():
             {"sheet": "Billing Code",              "title": "Billing Code Problem"},
             {"sheet": "PDNA",                      "title": "PDNA"},
             {"sheet": "RAN_CN_DUE",                "title": "RAN_C/D_CN_DUE Calls On The Platter And Targets"},
+            {"sheet": "WORK_IN_PROGRESS","title": "WORK_IN_PROGRESS Calls On The Platter And Targets"},
             {"sheet": "Dealer Platter",            "title": "Dealer Circlewise Platter And Targets"},
         ]
 
@@ -837,13 +891,6 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
     all_recipients = recipient_email + cc_emails
 
     try:
-        # server = smtplib.SMTP("smtp.gmail.com", 587)
-        # server.ehlo()
-        # server.starttls()
-        # server.login(sender_email, app_password)
-        # print("Login Successfull...!!!")
-        # server.sendmail(sender_email, all_recipients, msg.as_string())
-
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.ehlo()
         server.starttls()
@@ -862,4 +909,3 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
             server.quit()
         except:
             pass
-
