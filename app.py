@@ -14,7 +14,7 @@ from main import (
     dealerwise_platter,          
     fetch_and_format_report,
     send_email,
-    work_in_progress_status_platter,
+    work_in_progress_status_platter
 )
 
 from src.sidebar import render_sidebar
