@@ -14,7 +14,7 @@ from main import (
     dealerwise_platter,          
     fetch_and_format_report,
     send_email,
-    work_in_progress_status_platter
+    work_in_progress_status_platter,
 )
 
 from src.sidebar import render_sidebar
@@ -49,7 +49,7 @@ if page == "upload":
 
                 except Exception as e:
                     st.error(f"Error during processing: {e}")
-
+        
     st.divider()
 
     # --- Download Section (independent of upload) ---
