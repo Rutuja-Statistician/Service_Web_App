@@ -143,7 +143,10 @@ def func1(raw_file):
 def circlewise_platter(merged_data):
     try:
         spreadsheet = connect_gsheet()
-        summary = merged_data.groupby("circle").agg({
+
+        merged_data1 = merged_data[merged_data["status_code"] != "TO_BE_REJECTED"]
+
+        summary = merged_data1.groupby("circle").agg({
             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
         }).reset_index()
 
@@ -161,10 +164,81 @@ def circlewise_platter(merged_data):
         # Sort by Platter1 descending BEFORE adding Total row
         summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
 
-        totals = summary.select_dtypes(include='number').sum()
-        total_row = pd.DataFrame([totals])
-        total_row["Circle"] = "Total"
-        summary = pd.concat([summary, total_row], ignore_index=True)
+        # Separate TBR data from original dataset
+        tbr_data = merged_data[merged_data["status_code"] == "TO_BE_REJECTED"]
+
+        # Aggregate TBR row
+        if not tbr_data.empty:
+            tbr_summary = tbr_data.agg({
+                "red_call_flag": "sum",
+                "enc1_flag": "sum",
+                "enc2_flag": "sum"
+            })
+
+            tbr_row = pd.DataFrame([tbr_summary])
+            tbr_row = tbr_row.rename(columns={
+                "red_call_flag": "Red Call",
+                "enc1_flag": "Encroaching1",
+                "enc2_flag": "Encroaching2"
+            })
+
+            tbr_row["Platter1"] = tbr_row["Red Call"] + tbr_row["Encroaching1"]
+            tbr_row["Platter2"] = tbr_row["Platter1"] + tbr_row["Encroaching2"]
+            tbr_row["Circle"] = "TO_BE_REJECTED"
+
+            tbr_row = tbr_row[col_order]
+        else:
+            tbr_row = pd.DataFrame(columns=col_order)
+
+        # Total excluding TBR
+        non_tbr_data = merged_data[merged_data["status_code"] != "TO_BE_REJECTED"]
+
+        total_excl = non_tbr_data.agg({
+            "red_call_flag": "sum",
+            "enc1_flag": "sum",
+            "enc2_flag": "sum"
+        })
+
+        total_excl_row = pd.DataFrame([total_excl])
+        total_excl_row = total_excl_row.rename(columns={
+            "red_call_flag": "Red Call",
+            "enc1_flag": "Encroaching1",
+            "enc2_flag": "Encroaching2"
+        })
+
+        total_excl_row["Platter1"] = total_excl_row["Red Call"] + total_excl_row["Encroaching1"]
+        total_excl_row["Platter2"] = total_excl_row["Platter1"] + total_excl_row["Encroaching2"]
+        total_excl_row["Circle"] = "Total (Excl TBR)"
+
+        total_excl_row = total_excl_row[col_order]
+
+        # Grand Total (including everything)
+        grand_total = merged_data.agg({
+            "red_call_flag": "sum",
+            "enc1_flag": "sum",
+            "enc2_flag": "sum"
+        })
+
+        grand_total_row = pd.DataFrame([grand_total])
+        grand_total_row = grand_total_row.rename(columns={
+            "red_call_flag": "Red Call",
+            "enc1_flag": "Encroaching1",
+            "enc2_flag": "Encroaching2"
+        })
+
+        grand_total_row["Platter1"] = grand_total_row["Red Call"] + grand_total_row["Encroaching1"]
+        grand_total_row["Platter2"] = grand_total_row["Platter1"] + grand_total_row["Encroaching2"]
+        grand_total_row["Circle"] = "Grand Total"
+
+        grand_total_row = grand_total_row[col_order]
+
+        # FINAL STRUCTURE
+        summary = pd.concat([
+            summary,
+            total_excl_row,
+            tbr_row,
+            grand_total_row
+        ], ignore_index=True)
 
         # Write to Google Sheet
         try:
@@ -179,14 +253,59 @@ def circlewise_platter(merged_data):
         # Call tracker with circlewise summary
         tracker(summary)
 
-        # st.subheader("Circlewise Platter Preview")
-        # st.dataframe(summary, use_container_width=True)
-
         show_popup("Circlewise platter report created successfully!", type="success")
 
     except Exception as e:
         print(f"Error in circlewise platter function: {e}")
         show_popup(f"Error in circlewise_platter is : {e}", type="error") 
+
+# def circlewise_platter(merged_data):
+#     try:
+#         spreadsheet = connect_gsheet()
+#         summary = merged_data.groupby("circle").agg({
+#             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+#         }).reset_index()
+
+#         summary = summary.rename(columns={
+#             "circle": "Circle", "red_call_flag": "Red Call",
+#             "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+#         })
+
+#         summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
+#         summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+
+#         col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2"]
+#         summary = summary[col_order]
+
+#         # Sort by Platter1 descending BEFORE adding Total row
+#         summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+
+#         totals = summary.select_dtypes(include='number').sum()
+#         total_row = pd.DataFrame([totals])
+#         total_row["Circle"] = "Total"
+#         summary = pd.concat([summary, total_row], ignore_index=True)
+
+#         # Write to Google Sheet
+#         try:
+#             worksheet = spreadsheet.worksheet("Daily Circlewise Platter")
+#         except gspread.WorksheetNotFound:
+#             worksheet = spreadsheet.add_worksheet("Daily Circlewise Platter", rows=5000, cols=30)
+
+#         worksheet.clear()
+#         data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
+#         worksheet.update(data_to_write)
+
+#         # Call tracker with circlewise summary
+#         tracker(summary)
+
+#         # st.subheader("Circlewise Platter Preview")
+#         # st.dataframe(summary, use_container_width=True)
+
+#         show_popup("Circlewise platter report created successfully!", type="success")
+
+#     except Exception as e:
+#         print(f"Error in circlewise platter function: {e}")
+#         show_popup(f"Error in circlewise_platter is : {e}", type="error") 
 
 
 def tracker(df):
@@ -196,7 +315,6 @@ def tracker(df):
         IST = pytz.timezone('Asia/Kolkata')
         today_str = datetime.now().strftime("%Y-%m-%d")
         time_str  = datetime.now(IST).strftime("%H:%M")
-        print("The time string is:",time_str)
 
         # --- Get or create Tracker worksheet ---
         try:
@@ -328,17 +446,51 @@ def statuswise_platter(merged_data):
         col_order = ["Status", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
         summary = summary[col_order]
 
-        # Sort by Platter1 descending BEFORE adding Total row
-        summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+        # # Sort by Platter1 descending BEFORE adding Total row
+        # summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
         
-        totals = summary.select_dtypes(include='number').sum()
-        total_row = pd.DataFrame([totals])
-        total_row["Status"] = "Total"
-        summary = pd.concat([summary, total_row], ignore_index=True)
+        # totals = summary.select_dtypes(include='number').sum()
+        # total_row = pd.DataFrame([totals])
+        # total_row["Status"] = "Total"
+        # summary = pd.concat([summary, total_row], ignore_index=True)
+
+        # Sort before totals
+        summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+
+        # Separate "To Be Rejected"
+        rejected_df = summary[summary["Status"] == "TO_BE_REJECTED"]
+        remaining_df = summary[summary["Status"] != "TO_BE_REJECTED"]
+
+        # Ensure ONLY ONE rejected row (aggregate if needed)
+        if not rejected_df.empty:
+            rejected_sum = rejected_df.select_dtypes(include='number').sum()
+            rejected_row = pd.DataFrame([rejected_sum])
+            rejected_row["Status"] = "To Be Rejected"
+        else:
+            rejected_row = pd.DataFrame(columns=summary.columns)
+
+        # Total WITHOUT "To Be Rejected"
+        total_excl = remaining_df.select_dtypes(include='number').sum()
+        total_excl_row = pd.DataFrame([total_excl])
+        total_excl_row["Status"] = "Total (Excl TBR)"
+
+        # Grand Total INCLUDING everything
+        grand_total = summary.select_dtypes(include='number').sum()
+        grand_total_row = pd.DataFrame([grand_total])
+        grand_total_row["Status"] = "Grand Total (Incl TBR)"
+
+        # FINAL ORDER (this is the key part)
+        final_df = pd.concat([
+            remaining_df,
+            total_excl_row,
+            rejected_row,
+            grand_total_row
+        ], ignore_index=True)
+
+        summary = final_df
 
         # To write data in google sheet
         if summary is not None and not summary.empty:
-            # Open or create the worksheet
             try:
                 worksheet = spreadsheet.worksheet("Statuswise Platter")
             except gspread.WorksheetNotFound:
@@ -355,6 +507,7 @@ def statuswise_platter(merged_data):
     except Exception as e:
         print(f"Error in statuswise_platter function : {e}")
         show_popup(f"Error in statuswise_platter is : {e}", type = "error")
+
 
 def billing_code_status_platter(merged_data):
     try:
@@ -640,21 +793,37 @@ def apply_formatting(workbook, worksheet, summary, title_text):
 
         total_row_idx = len(summary) - 1
 
-        # 2. Apply Data Formatting
+        # # 2. Apply Data Formatting
+        # for row_num in range(2, len(summary) + 2):
+        #     df_row_idx = row_num - 2
+        #     is_total   = (df_row_idx == total_row_idx)
+
+        #     for col_num in range(6):
+        #         value = summary.iloc[df_row_idx, col_num]
+
+        #         if is_total:
+        #             # Same color for all 6 columns in total row
+        #             worksheet.write(row_num, col_num, value, fmt_total)
+        #         else:
+        #             fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
+        #             worksheet.write(row_num, col_num, value, fmt)
+
+
         for row_num in range(2, len(summary) + 2):
             df_row_idx = row_num - 2
-            is_total   = (df_row_idx == total_row_idx)
+
+            status_value = str(summary.iloc[df_row_idx, 0]).upper()
+            is_total = "TOTAL" in status_value   # ✅ key change
 
             for col_num in range(6):
                 value = summary.iloc[df_row_idx, col_num]
 
                 if is_total:
-                    # Same color for all 6 columns in total row
                     worksheet.write(row_num, col_num, value, fmt_total)
                 else:
                     fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
                     worksheet.write(row_num, col_num, value, fmt)
-
+                    
         # 3. Write Column Headers
         for col_num, value in enumerate(summary.columns.values):
             worksheet.write(1, col_num, value, fmt_header)
@@ -664,6 +833,7 @@ def apply_formatting(workbook, worksheet, summary, title_text):
     except Exception as e:
         print(f"Error in Formatting {worksheet} is : {e}")
         show_popup(f"Error in Formatting {worksheet} is : {e}", type="error")
+
 
 def apply_tracker_excel_formatting(workbook, worksheet, df, title_text):
     try:
@@ -893,6 +1063,7 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
     all_recipients = recipient_email + cc_emails
 
     try:
+
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.ehlo()
         server.starttls()
@@ -911,3 +1082,4 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
             server.quit()
         except:
             pass
+
