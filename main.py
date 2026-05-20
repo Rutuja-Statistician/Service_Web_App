@@ -13,6 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
+
 # To create connection
 def get_gsheet_conn():
 
@@ -97,7 +98,6 @@ def func1(raw_file):
         status_data.columns = status_data.columns.str.lower().str.strip().str.replace(" ", "_")
 
         merged_data = data.merge(status_data[["status","team", "number"]], left_on= "status_code", right_on="status", how= "left")
-        merged_data.to_excel("Raw_Data.xlsx", index= False)
         
         # Adding filter on teams, choosing customer xperience
         merged_data = merged_data[merged_data["team"].str.lower().str.strip() == "customer xperience"]
@@ -105,16 +105,45 @@ def func1(raw_file):
         merged_data["age_reg_days"] = merged_data["age_from_call_reg"].dt.days 
         merged_data["age_update_days"] = merged_data["age_from_call_update"].dt.days 
 
+        # def assign_category(row):
+        #     status = str(row["status"]).strip().lower()
+        #     num = row["number"]
+        #     if pd.isna(num): return ""
+        #     age = row["age_reg_days"] if status in ["open", "work_allocated"] else row["age_update_days"]
+        #     if pd.isna(age): return ""
+
+        #     if age > num: return "Red Call"
+        #     elif age == num: return "Encroaching1"
+        #     elif age == num - 1: return "Encroaching2"
+        #     return ""
+
         def assign_category(row):
             status = str(row["status"]).strip().lower()
             num = row["number"]
-            if pd.isna(num): return ""
-            age = row["age_reg_days"] if status in ["open", "work_allocated"] else row["age_update_days"]
-            if pd.isna(age): return ""
 
-            if age > num: return "Red Call"
-            elif age == num: return "Encroaching1"
-            elif age == num - 1: return "Encroaching2"
+            if pd.isna(num):
+                return ""
+
+            # Select correct age column
+            age = row["age_reg_days"] if status in ["open", "work_allocated"] else row["age_update_days"]
+
+            if pd.isna(age):
+                return ""
+
+            # Special condition
+            if status in ["open_rejected_false", "open_completed_false"]:
+                if age >= num:
+                    return "Red Call"
+                return ""
+
+            # Default logic
+            if age > num:
+                return "Red Call"
+            elif age == num:
+                return "Encroaching1"
+            elif age == num - 1:
+                return "Encroaching2"
+
             return ""
 
         merged_data["category"] = merged_data.apply(assign_category, axis=1)
