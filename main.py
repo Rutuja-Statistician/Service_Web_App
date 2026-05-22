@@ -143,13 +143,15 @@ def func1(raw_file):
                 return "Encroaching1"
             elif age == num - 1:
                 return "Encroaching2"
-
+            elif age == num - 2:
+                return "Encroaching3"
             return ""
 
         merged_data["category"] = merged_data.apply(assign_category, axis=1)
         merged_data["red_call_flag"] = (merged_data["category"] == "Red Call").astype(int)
         merged_data["enc1_flag"] = (merged_data["category"] == "Encroaching1").astype(int)
         merged_data["enc2_flag"] = (merged_data["category"] == "Encroaching2").astype(int)
+        merged_data["enc3_flag"] = (merged_data["category"] == "Encroaching3").astype(int)
         
         # To write data in google sheet
         if merged_data is not None and not merged_data.empty:
@@ -175,18 +177,19 @@ def circlewise_platter(merged_data):
         merged_data1 = merged_data[merged_data["status_code"] != "TO_BE_REJECTED"]
 
         summary = merged_data1.groupby("circle").agg({
-            "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+            "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
         }).reset_index()
 
         summary = summary.rename(columns={
             "circle": "Circle", "red_call_flag": "Red Call",
-            "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+            "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
         })
 
         summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
         summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+        summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
 
-        col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2"]
+        col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2", "Encroaching3", "Platter3"]
         summary = summary[col_order]
 
         # Sort by Platter1 descending BEFORE adding Total row
@@ -200,18 +203,21 @@ def circlewise_platter(merged_data):
             tbr_summary = tbr_data.agg({
                 "red_call_flag": "sum",
                 "enc1_flag": "sum",
-                "enc2_flag": "sum"
+                "enc2_flag": "sum",
+                "enc3_flag": "sum"
             })
 
             tbr_row = pd.DataFrame([tbr_summary])
             tbr_row = tbr_row.rename(columns={
                 "red_call_flag": "Red Call",
                 "enc1_flag": "Encroaching1",
-                "enc2_flag": "Encroaching2"
+                "enc2_flag": "Encroaching2",
+                "enc3_flag": "Encroaching3"
             })
 
             tbr_row["Platter1"] = tbr_row["Red Call"] + tbr_row["Encroaching1"]
             tbr_row["Platter2"] = tbr_row["Platter1"] + tbr_row["Encroaching2"]
+            tbr_row["Platter3"] = tbr_row["Platter2"] + tbr_row["Encroaching3"]
             tbr_row["Circle"] = "TO_BE_REJECTED"
 
             tbr_row = tbr_row[col_order]
@@ -224,18 +230,21 @@ def circlewise_platter(merged_data):
         total_excl = non_tbr_data.agg({
             "red_call_flag": "sum",
             "enc1_flag": "sum",
-            "enc2_flag": "sum"
+            "enc2_flag": "sum",
+            "enc3_flag": "sum"
         })
 
         total_excl_row = pd.DataFrame([total_excl])
         total_excl_row = total_excl_row.rename(columns={
             "red_call_flag": "Red Call",
             "enc1_flag": "Encroaching1",
-            "enc2_flag": "Encroaching2"
+            "enc2_flag": "Encroaching2",
+            "enc3_flag": "Encroaching3"
         })
 
         total_excl_row["Platter1"] = total_excl_row["Red Call"] + total_excl_row["Encroaching1"]
         total_excl_row["Platter2"] = total_excl_row["Platter1"] + total_excl_row["Encroaching2"]
+        total_excl_row["Platter3"] = total_excl_row["Platter2"] + total_excl_row["Encroaching3"]
         total_excl_row["Circle"] = "Total (Excl TBR)"
 
         total_excl_row = total_excl_row[col_order]
@@ -244,18 +253,21 @@ def circlewise_platter(merged_data):
         grand_total = merged_data.agg({
             "red_call_flag": "sum",
             "enc1_flag": "sum",
-            "enc2_flag": "sum"
+            "enc2_flag": "sum",
+            "enc3_flag": "sum"
         })
 
         grand_total_row = pd.DataFrame([grand_total])
         grand_total_row = grand_total_row.rename(columns={
             "red_call_flag": "Red Call",
             "enc1_flag": "Encroaching1",
-            "enc2_flag": "Encroaching2"
+            "enc2_flag": "Encroaching2",
+            "enc3_flag": "Encroaching3"
         })
 
         grand_total_row["Platter1"] = grand_total_row["Red Call"] + grand_total_row["Encroaching1"]
         grand_total_row["Platter2"] = grand_total_row["Platter1"] + grand_total_row["Encroaching2"]
+        grand_total_row["Platter3"] = grand_total_row["Platter2"] + grand_total_row["Encroaching3"]
         grand_total_row["Circle"] = "Grand Total"
 
         grand_total_row = grand_total_row[col_order]
@@ -287,54 +299,141 @@ def circlewise_platter(merged_data):
         print(f"Error in circlewise platter function: {e}")
         show_popup(f"Error in circlewise_platter is : {e}", type="error") 
 
-# def circlewise_platter(merged_data):
+# def tracker(df):
 #     try:
 #         spreadsheet = connect_gsheet()
-#         summary = merged_data.groupby("circle").agg({
-#             "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
-#         }).reset_index()
+#         # Set timezone to India
+#         IST = pytz.timezone('Asia/Kolkata')
+#         today_str = datetime.now().strftime("%Y-%m-%d")
+#         time_str  = datetime.now(IST).strftime("%H:%M")
 
-#         summary = summary.rename(columns={
-#             "circle": "Circle", "red_call_flag": "Red Call",
-#             "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+#         # --- Get or create Tracker worksheet ---
+#         try:
+#             worksheet = spreadsheet.worksheet("Tracker")
+#         except gspread.WorksheetNotFound:
+#             worksheet = spreadsheet.add_worksheet("Tracker", rows=1000, cols=50)
+
+#         # --- Read existing data (returns list of lists) ---
+#         existing_data = worksheet.get_all_values()
+
+#         # --- Check if first DATA row has today's date ---
+#         if not existing_data or len(existing_data) < 2 or existing_data[1][0] != today_str:
+#             worksheet.clear()
+#             existing_data = []
+
+#         # ================== ✅ NEW LOGIC (FILTER TILL TOTAL EXCL TBR) ==================
+
+#         df["Circle"] = df["Circle"].astype(str)
+
+#         mask_total_excl = df["Circle"].str.strip().str.upper() == "TOTAL (EXCL TBR)"
+
+#         if mask_total_excl.any():
+#             cutoff_index = df[mask_total_excl].index[0]
+#             df = df.loc[:cutoff_index].copy()
+
+#         # Rename to "Total"
+#         df["Circle"] = df["Circle"].replace({
+#             "Total (Excl TBR)": "Total",
+#             "TOTAL (EXCL TBR)": "Total"
 #         })
 
-#         summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
-#         summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+#         # ============================================================================
 
-#         col_order = ["Circle", "Red Call", "Encroaching1", "Platter1", "Encroaching2", "Platter2"]
-#         summary = summary[col_order]
+#         # --- Extract Circle + Platter1 + Platter2 ---
+#         platter_data = df[["Circle", "Platter1", "Platter2"]].copy()
+#         platter_data["Circle"] = platter_data["Circle"].astype(str)
+#         platter_data["Platter1"] = pd.to_numeric(platter_data["Platter1"], errors='coerce').fillna(0)
+#         platter_data["Platter2"] = pd.to_numeric(platter_data["Platter2"], errors='coerce').fillna(0)
 
-#         # Sort by Platter1 descending BEFORE adding Total row
-#         summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
+#         new_p1_col = f"{time_str} P1"
+#         new_p2_col = f"{time_str} P2"
 
-#         totals = summary.select_dtypes(include='number').sum()
-#         total_row = pd.DataFrame([totals])
-#         total_row["Circle"] = "Total"
-#         summary = pd.concat([summary, total_row], ignore_index=True)
+#         # Helper: push Total row(s) to the very bottom
+#         def sort_total_to_bottom(df_in):
+#             is_total = df_in["Circle"].str.strip().str.lower() == "total"
+#             return pd.concat(
+#                 [df_in[~is_total], df_in[is_total]],
+#                 ignore_index=True
+#             )
 
-#         # Write to Google Sheet
-#         try:
-#             worksheet = spreadsheet.worksheet("Daily Circlewise Platter")
-#         except gspread.WorksheetNotFound:
-#             worksheet = spreadsheet.add_worksheet("Daily Circlewise Platter", rows=5000, cols=30)
+#         if not existing_data:
+#             # --- First run ---
+#             header = ["Date", "Circle", new_p1_col, new_p2_col]
+#             rows = [header]
 
-#         worksheet.clear()
-#         data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
-#         worksheet.update(data_to_write)
+#             for _, row in platter_data.iterrows():
+#                 rows.append([
+#                     today_str,
+#                     str(row["Circle"]),
+#                     str(row["Platter1"]),
+#                     str(row["Platter2"])
+#                 ])
 
-#         # Call tracker with circlewise summary
-#         tracker(summary)
+#             worksheet.update(rows)
 
-#         # st.subheader("Circlewise Platter Preview")
-#         # st.dataframe(summary, use_container_width=True)
+#         else:
+#             # --- Subsequent runs ---
+#             existing_df = pd.DataFrame(existing_data[1:], columns=existing_data[0])
+#             existing_df["Circle"] = existing_df["Circle"].astype(str)
 
-#         show_popup("Circlewise platter report created successfully!", type="success")
+#             # Build lookup dict
+#             platter_dict = {
+#                 str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]))
+#                 for _, row in platter_data.iterrows()
+#             }
+
+#             # Add new circles if any
+#             existing_circles = set(existing_df["Circle"].tolist())
+#             new_circles = [c for c in platter_dict if c not in existing_circles]
+
+#             if new_circles:
+#                 empty_row = {col: "0" for col in existing_df.columns}
+#                 new_rows = []
+
+#                 for circle in new_circles:
+#                     row = empty_row.copy()
+#                     row["Date"] = today_str
+#                     row["Circle"] = circle
+#                     new_rows.append(row)
+
+#                 new_rows_df = pd.DataFrame(new_rows)
+#                 existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
+
+#             # Add new time columns
+#             existing_df[new_p1_col] = existing_df["Circle"].map(
+#                 lambda c: platter_dict.get(c, ("0", "0"))[0]
+#             )
+#             existing_df[new_p2_col] = existing_df["Circle"].map(
+#                 lambda c: platter_dict.get(c, ("0", "0"))[1]
+#             )
+
+#             # Move Total to bottom
+#             existing_df = sort_total_to_bottom(existing_df)
+
+#             # Convert to list
+#             updated_rows = [existing_df.columns.tolist()] + existing_df.values.tolist()
+
+#             # Sort based on latest P1
+#             headers = updated_rows[0]
+#             p1_indices = [i for i, h in enumerate(headers) if h.endswith("P1")]
+#             latest_p1_idx = p1_indices[-1]
+
+#             middle_rows = sorted(
+#                 updated_rows[1:len(updated_rows)-1],
+#                 key=lambda x: int(float(x[latest_p1_idx])) if x[latest_p1_idx] not in ("", None) else 0,
+#                 reverse=True
+#             )
+
+#             new_rows = [headers] + middle_rows + [updated_rows[-1]]
+
+#             worksheet.clear()
+#             worksheet.update(new_rows)
+
+#         show_popup("Tracker updated successfully!", type="success")
 
 #     except Exception as e:
-#         print(f"Error in circlewise platter function: {e}")
-#         show_popup(f"Error in circlewise_platter is : {e}", type="error") 
-
+#         print(f"Error in tracker function is: {e}")
+#         show_popup(f"Error in tracker function is: {e}", type="error")
 
 # def tracker(df):
 #     try:
@@ -353,19 +452,39 @@ def circlewise_platter(merged_data):
 #         # --- Read existing data (returns list of lists) ---
 #         existing_data = worksheet.get_all_values()
 
-#         # --- Check if first DATA row has today's date (row index 1, skip header) ---
+#         # --- Check if first DATA row has today's date ---
 #         if not existing_data or len(existing_data) < 2 or existing_data[1][0] != today_str:
 #             worksheet.clear()
 #             existing_data = []
 
+#         # ================== ✅ NEW LOGIC (FILTER TILL TOTAL EXCL TBR) ==================
+
+#         df["Circle"] = df["Circle"].astype(str)
+
+#         mask_total_excl = df["Circle"].str.strip().str.upper() == "TOTAL (EXCL TBR)"
+
+#         if mask_total_excl.any():
+#             cutoff_index = df[mask_total_excl].index[0]
+#             df = df.loc[:cutoff_index].copy()
+
+#         # Rename to "Total"
+#         df["Circle"] = df["Circle"].replace({
+#             "Total (Excl TBR)": "Total",
+#             "TOTAL (EXCL TBR)": "Total"
+#         })
+
+#         # ============================================================================
+
 #         # --- Extract Circle + Platter1 + Platter2 ---
-#         platter_data = df[["Circle", "Platter1", "Platter2"]].copy()
+#         platter_data = df[["Circle", "Platter1", "Platter2", "Platter2"]].copy()
 #         platter_data["Circle"] = platter_data["Circle"].astype(str)
-#         platter_data["Platter1"] = pd.to_numeric(platter_data["Platter1"], errors= 'coerce').fillna(0)
-#         platter_data["Platter2"] = pd.to_numeric(platter_data["Platter2"], errors= 'coerce').fillna(0)
+#         platter_data["Platter1"] = pd.to_numeric(platter_data["Platter1"], errors='coerce').fillna(0)
+#         platter_data["Platter2"] = pd.to_numeric(platter_data["Platter2"], errors='coerce').fillna(0)
+#         platter_data["Platter3"] = pd.to_numeric(platter_data["Platter3"], errors='coerce').fillna(0)
 
 #         new_p1_col = f"{time_str} P1"
 #         new_p2_col = f"{time_str} P2"
+#         new_p3_col = f"{time_str} P3"
 
 #         # Helper: push Total row(s) to the very bottom
 #         def sort_total_to_bottom(df_in):
@@ -376,76 +495,78 @@ def circlewise_platter(merged_data):
 #             )
 
 #         if not existing_data:
-#             # --- First run of the day: write fresh ---
-#             print("No existing data, writing fresh...")
-#             header = ["Date", "Circle", new_p1_col, new_p2_col]
+#             # --- First run ---
+#             header = ["Date", "Circle", new_p1_col, new_p2_col, new_p3_col]
 #             rows = [header]
+
 #             for _, row in platter_data.iterrows():
-#                 rows.append([today_str, str(row["Circle"]), str(row["Platter1"]), str(row["Platter2"])])
+#                 rows.append([
+#                     today_str,
+#                     str(row["Circle"]),
+#                     str(row["Platter1"]),
+#                     str(row["Platter2"]),
+#                     str(row["Platter3"])
+#                 ])
+
 #             worksheet.update(rows)
 
 #         else:
-#             # --- Subsequent runs: append new P1/P2 columns ---
-#             print("Existing data found, appending new columns...")
-#             print("Existing headers:", existing_data[0])
-
-#             # Convert list of lists → DataFrame
+#             # --- Subsequent runs ---
 #             existing_df = pd.DataFrame(existing_data[1:], columns=existing_data[0])
 #             existing_df["Circle"] = existing_df["Circle"].astype(str)
 
-#             # Build lookup dict: Circle → (P1, P2)
+#             # Build lookup dict
 #             platter_dict = {
-#                 str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]))
+#                 str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]), str(row["Platter3"]))
 #                 for _, row in platter_data.iterrows()
 #             }
 
-#             # Find circles in new data that are NOT in existing sheet → add as new rows
+#             # Add new circles if any
 #             existing_circles = set(existing_df["Circle"].tolist())
 #             new_circles = [c for c in platter_dict if c not in existing_circles]
 
 #             if new_circles:
-#                 print(f"New circles found, adding rows: {new_circles}")
 #                 empty_row = {col: "0" for col in existing_df.columns}
 #                 new_rows = []
+
 #                 for circle in new_circles:
 #                     row = empty_row.copy()
-#                     row["Date"]   = today_str
+#                     row["Date"] = today_str
 #                     row["Circle"] = circle
 #                     new_rows.append(row)
+
 #                 new_rows_df = pd.DataFrame(new_rows)
 #                 existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
 
-#             # Add new time-stamped columns for ALL rows (existing + newly added)
+#             # Add new time columns
 #             existing_df[new_p1_col] = existing_df["Circle"].map(
-#                 lambda c: platter_dict.get(c, ("0", "0"))[0]
+#                 lambda c: platter_dict.get(c, ("0", "0", "0"))[0]
 #             )
 #             existing_df[new_p2_col] = existing_df["Circle"].map(
-#                 lambda c: platter_dict.get(c, ("0", "0"))[1]
+#                 lambda c: platter_dict.get(c, ("0", "0", "0"))[1]
 #             )
-
-#             # Push Total row to the bottom before writing
+#             existing_df[new_p3_col] = existing_df["Circle"].map(
+#                 lambda c: platter_dict.get(c, ("0", "0", "0"))[1]
+#             )
+#             # Move Total to bottom
 #             existing_df = sort_total_to_bottom(existing_df)
 
-#             # Write back updated data
+#             # Convert to list
 #             updated_rows = [existing_df.columns.tolist()] + existing_df.values.tolist()
-#             # middle_rows = sorted(updated_rows[1:len(updated_rows)-1],key = lambda x: x[1])
 
-#             # Find the index of the latest P1 column (last P1 in headers)
+#             # Sort based on latest P1
 #             headers = updated_rows[0]
 #             p1_indices = [i for i, h in enumerate(headers) if h.endswith("P1")]
-#             latest_p1_idx = p1_indices[-1]  # Last P1 column = most recent time
+#             latest_p1_idx = p1_indices[-1]
 
-#             # Sort middle rows by latest P1 descending, keep header and Total row in place
 #             middle_rows = sorted(
 #                 updated_rows[1:len(updated_rows)-1],
 #                 key=lambda x: int(float(x[latest_p1_idx])) if x[latest_p1_idx] not in ("", None) else 0,
-#                 reverse=True 
+#                 reverse=True
 #             )
 
-#             new_rows = [headers] + middle_rows + [updated_rows[-1]]  # header + sorted + Total
+#             new_rows = [headers] + middle_rows + [updated_rows[-1]]
 
-
-#             # new_rows = [updated_rows[0]] + middle_rows + [updated_rows[-1]]
 #             worksheet.clear()
 #             worksheet.update(new_rows)
 
@@ -455,7 +576,7 @@ def circlewise_platter(merged_data):
 #         print(f"Error in tracker function is: {e}")
 #         show_popup(f"Error in tracker function is: {e}", type="error")
 
-
+        
 def tracker(df):
     try:
         spreadsheet = connect_gsheet()
@@ -478,7 +599,7 @@ def tracker(df):
             worksheet.clear()
             existing_data = []
 
-        # ================== ✅ NEW LOGIC (FILTER TILL TOTAL EXCL TBR) ==================
+        # ================== FILTER TILL TOTAL EXCL TBR ==================
 
         df["Circle"] = df["Circle"].astype(str)
 
@@ -494,16 +615,18 @@ def tracker(df):
             "TOTAL (EXCL TBR)": "Total"
         })
 
-        # ============================================================================
+        # =================================================================
 
-        # --- Extract Circle + Platter1 + Platter2 ---
-        platter_data = df[["Circle", "Platter1", "Platter2"]].copy()
-        platter_data["Circle"] = platter_data["Circle"].astype(str)
+        # --- Extract Circle + Platter1 + Platter2 + Platter3 ---
+        platter_data = df[["Circle", "Platter1", "Platter2", "Platter3"]].copy()
+        platter_data["Circle"]   = platter_data["Circle"].astype(str)
         platter_data["Platter1"] = pd.to_numeric(platter_data["Platter1"], errors='coerce').fillna(0)
         platter_data["Platter2"] = pd.to_numeric(platter_data["Platter2"], errors='coerce').fillna(0)
+        platter_data["Platter3"] = pd.to_numeric(platter_data["Platter3"], errors='coerce').fillna(0)
 
         new_p1_col = f"{time_str} P1"
         new_p2_col = f"{time_str} P2"
+        new_p3_col = f"{time_str} P3"
 
         # Helper: push Total row(s) to the very bottom
         def sort_total_to_bottom(df_in):
@@ -515,7 +638,7 @@ def tracker(df):
 
         if not existing_data:
             # --- First run ---
-            header = ["Date", "Circle", new_p1_col, new_p2_col]
+            header = ["Date", "Circle", new_p1_col, new_p2_col, new_p3_col]
             rows = [header]
 
             for _, row in platter_data.iterrows():
@@ -523,7 +646,8 @@ def tracker(df):
                     today_str,
                     str(row["Circle"]),
                     str(row["Platter1"]),
-                    str(row["Platter2"])
+                    str(row["Platter2"]),
+                    str(row["Platter3"])
                 ])
 
             worksheet.update(rows)
@@ -533,9 +657,18 @@ def tracker(df):
             existing_df = pd.DataFrame(existing_data[1:], columns=existing_data[0])
             existing_df["Circle"] = existing_df["Circle"].astype(str)
 
+            # ✅ Fix: Backfill missing P3 columns for old timestamps (P1/P2 only structure)
+            existing_p2_cols = [col for col in existing_df.columns if col.endswith("P2")]
+            for p2_col in existing_p2_cols:
+                timestamp = p2_col.replace(" P2", "")
+                p3_col = f"{timestamp} P3"
+                if p3_col not in existing_df.columns:
+                    p2_idx = existing_df.columns.tolist().index(p2_col)
+                    existing_df.insert(p2_idx + 1, p3_col, "0")
+
             # Build lookup dict
             platter_dict = {
-                str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]))
+                str(row["Circle"]): (str(row["Platter1"]), str(row["Platter2"]), str(row["Platter3"]))
                 for _, row in platter_data.iterrows()
             }
 
@@ -558,10 +691,13 @@ def tracker(df):
 
             # Add new time columns
             existing_df[new_p1_col] = existing_df["Circle"].map(
-                lambda c: platter_dict.get(c, ("0", "0"))[0]
+                lambda c: platter_dict.get(c, ("0", "0", "0"))[0]
             )
             existing_df[new_p2_col] = existing_df["Circle"].map(
-                lambda c: platter_dict.get(c, ("0", "0"))[1]
+                lambda c: platter_dict.get(c, ("0", "0", "0"))[1]
+            )
+            existing_df[new_p3_col] = existing_df["Circle"].map(
+                lambda c: platter_dict.get(c, ("0", "0", "0"))[2]
             )
 
             # Move Total to bottom
@@ -570,7 +706,7 @@ def tracker(df):
             # Convert to list
             updated_rows = [existing_df.columns.tolist()] + existing_df.values.tolist()
 
-            # Sort based on latest P1
+            # Sort middle rows based on latest P1 (excluding header and last Total row)
             headers = updated_rows[0]
             p1_indices = [i for i, h in enumerate(headers) if h.endswith("P1")]
             latest_p1_idx = p1_indices[-1]
@@ -591,34 +727,28 @@ def tracker(df):
     except Exception as e:
         print(f"Error in tracker function is: {e}")
         show_popup(f"Error in tracker function is: {e}", type="error")
-
-        
+                
 def statuswise_platter(merged_data):
     try:
         spreadsheet = connect_gsheet()
 
         summary = merged_data.groupby("status_code").agg({
-            "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+            "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
         }).reset_index()
 
         summary = summary.rename(columns={
             "status_code": "Status", "red_call_flag": "Red Call",
-            "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+            "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
         })
 
         summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
         summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+        summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
         
-        col_order = ["Status", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+        col_order = ["Status", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
         summary = summary[col_order]
 
-        # # Sort by Platter1 descending BEFORE adding Total row
-        # summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
-        
-        # totals = summary.select_dtypes(include='number').sum()
-        # total_row = pd.DataFrame([totals])
-        # total_row["Status"] = "Total"
-        # summary = pd.concat([summary, total_row], ignore_index=True)
+    
 
         # Sort before totals
         summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
@@ -692,18 +822,19 @@ def billing_code_status_platter(merged_data):
         
         if not merged_data.empty:
             summary = summary.groupby("circle").agg({
-                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
             }).reset_index()
 
             summary = summary.rename(columns={
                 "circle": "Circle", "red_call_flag": "Red Call",
-                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
             })
 
             summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
             summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
             
-            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
             summary = summary[col_order]
             
             # Droping the rows where Platter2 is zero
@@ -744,18 +875,19 @@ def pdna_status_platter(merged_data):
         
         if not merged_data.empty:
             summary = merged_data.groupby("circle").agg({
-                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
             }).reset_index()
 
             summary = summary.rename(columns={
                 "circle": "Circle", "red_call_flag": "Red Call",
-                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
             })
 
             summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
             summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
             
-            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
             summary = summary[col_order]
 
             # Droping the rows where Platter2 is zero
@@ -796,18 +928,19 @@ def work_in_progress_status_platter(merged_data):
         
         if not merged_data.empty:
             summary = merged_data.groupby("circle").agg({
-                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
             }).reset_index()
 
             summary = summary.rename(columns={
                 "circle": "Circle", "red_call_flag": "Red Call",
-                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
             })
 
             summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
             summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
             
-            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
             summary = summary[col_order]
 
             # Droping the rows where Platter2 is zero
@@ -848,18 +981,19 @@ def ran_cn_due_status_platter(merged_data):
         
         if not merged_data.empty:
             summary = merged_data.groupby("circle").agg({
-                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
             }).reset_index()
 
             summary = summary.rename(columns={
                 "circle": "Circle", "red_call_flag": "Red Call",
-                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
             })
 
             summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
             summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
             
-            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
             summary = summary[col_order]
 
             # Droping the rows where Platter2 is zero
@@ -906,18 +1040,19 @@ def dealerwise_platter(merged_data):
 
         if not filtered_data.empty:
             summary = filtered_data.groupby("circle").agg({
-                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum"
+                "red_call_flag": "sum", "enc1_flag": "sum", "enc2_flag": "sum", "enc3_flag": "sum"
             }).reset_index()
 
             summary = summary.rename(columns={
                 "circle": "Circle", "red_call_flag": "Red Call",
-                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2"
+                "enc1_flag": "Encroaching1", "enc2_flag": "Encroaching2", "enc3_flag": "Encroaching3"
             })
 
             summary["Platter1"] = summary["Red Call"] + summary["Encroaching1"]
             summary["Platter2"] = summary["Platter1"] + summary["Encroaching2"]
+            summary["Platter3"] = summary["Platter2"] + summary["Encroaching3"]
             
-            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2"]
+            col_order = ["Circle", "Red Call", "Encroaching1", "Platter1","Encroaching2", "Platter2","Encroaching3", "Platter3"]
             summary = summary[col_order]
             
             # Droping the rows where Platter2 is zero
@@ -955,7 +1090,7 @@ def apply_formatting(workbook, worksheet, summary, title_text):
 
         # 1. Write Main Title
         report_date = datetime.now().strftime("%d-%b-%Y")
-        worksheet.merge_range('A1:F1', f"{title_text} --- {report_date}", fmt_main_title)
+        worksheet.merge_range('A1:H1', f"{title_text} --- {report_date}", fmt_main_title)
 
         total_row_idx = len(summary) - 1
 
@@ -981,13 +1116,13 @@ def apply_formatting(workbook, worksheet, summary, title_text):
             status_value = str(summary.iloc[df_row_idx, 0]).upper()
             is_total = "TOTAL" in status_value   # ✅ key change
 
-            for col_num in range(6):
+            for col_num in range(8):
                 value = summary.iloc[df_row_idx, col_num]
 
                 if is_total:
                     worksheet.write(row_num, col_num, value, fmt_total)
                 else:
-                    fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
+                    fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
                     worksheet.write(row_num, col_num, value, fmt)
                     
         # 3. Write Column Headers
