@@ -1300,13 +1300,13 @@ def fetch_and_format_report():
 
                     raw_df = raw_df[["circle","status_code","service_id", "customer_name","phone1","company_name","provider_phone1","category"]]
 
-                    raw_df = raw_df[(raw_df["category"] == "Red Call") | (raw_df["category"] == "Encroaching1")]
+                    raw_df = raw_df[(raw_df["category"] == "Red Call") | (raw_df["category"] == "Encroaching1") | (raw_df["category"] == "Encroaching2")]
 
-                    raw_df = raw_df[raw_df["category"].isin(["Red Call", "Encroaching1"])]
+                    raw_df = raw_df[raw_df["category"].isin(["Red Call", "Encroaching1", "Encroaching2"])]
 
                     raw_df["category"] = pd.Categorical(
                         raw_df["category"],
-                        categories=["Red Call", "Encroaching1"],
+                        categories=["Red Call", "Encroaching1", "Encroaching2"],
                         ordered=True
                     )
 
