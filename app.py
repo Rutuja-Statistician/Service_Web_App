@@ -16,7 +16,6 @@ from main import (
     send_email,
     work_in_progress_status_platter,
 )
-
 from src.sidebar import render_sidebar
 
 st.set_page_config(page_title="Service Report Generator", layout="wide")
