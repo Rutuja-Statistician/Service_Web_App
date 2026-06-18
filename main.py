@@ -76,11 +76,11 @@ def func1(raw_file):
         data = pd.read_excel(raw_file)
         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
         # To select the subset of the dataframe from the complete data
-        selected_columns = ["service_id","customer_name","company_name","circle", "customer_type", "call_date", "updatedate", "status_code","phone1","provider_phone1"]
+        selected_columns = ["service_id","customer_name","company_name","circle", "customer_type", "call_date", "status_updated_date", "status_code","phone1","provider_phone1"]
         data = data[selected_columns]
         data["service_id"] = data["service_id"].astype(str)
         data["call_date"] = pd.to_datetime(data["call_date"]).dt.normalize()
-        data["updatedate"] = pd.to_datetime(data["updatedate"]).dt.normalize()
+        data["status_updated_date"] = pd.to_datetime(data["status_updated_date"]).dt.normalize()
 
         todayDate = pd.to_datetime('today').date()
         data = data[data["call_date"].dt.date != todayDate]
@@ -88,7 +88,7 @@ def func1(raw_file):
 
         data["today_date"] = pd.to_datetime(todayDate)
         data["age_from_call_reg"] = data["today_date"] - data["call_date"]
-        data["age_from_call_update"] = data["today_date"] - data["updatedate"]
+        data["age_from_call_update"] = data["today_date"] - data["status_updated_date"]
 
         # status_data = pd.read_excel(statuswise_file)
         norms_worksheet = spreadsheet.worksheet("Norms_Data")
