@@ -12,7 +12,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-
+import numpy as np
 
 # To create connection
 def get_gsheet_conn():
@@ -83,12 +83,37 @@ def func1(raw_file):
         data["status_updated_date"] = pd.to_datetime(data["status_updated_date"]).dt.normalize()
 
         todayDate = pd.to_datetime('today').date()
-        data = data[data["call_date"].dt.date != todayDate]
-        data = data[data["circle"].str.lower().str.strip() != "india"]
 
         data["today_date"] = pd.to_datetime(todayDate)
         data["age_from_call_reg"] = data["today_date"] - data["call_date"]
         data["age_from_call_update"] = data["today_date"] - data["status_updated_date"]
+
+        data["age_reg_days"] = data["age_from_call_reg"].dt.days 
+        data["age_update_days"] = data["age_from_call_update"].dt.days
+
+        # Open or create the worksheet
+        try:
+            mainData_worksheet = spreadsheet.worksheet("main_Data")
+        except gspread.WorksheetNotFound:
+            mainData_worksheet = spreadsheet.add_worksheet("main_Data", rows=5000, cols=30)
+            
+        # Clear existing data and write fresh
+        mainData_worksheet.clear()
+
+        if data is not None and not data.empty:
+            
+            # Convert DataFrame to list of lists
+            # data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+            data_to_write = [data.columns.tolist()] + data.fillna("").astype(str).values.tolist()
+            mainData_worksheet.update(data_to_write)
+            
+            show_popup("Data stored in the main database", type = "success")
+        else:
+            show_popup("No data found to add in main database...!", type = "info")
+
+
+        data = data[data["call_date"].dt.date != todayDate]
+        data = data[data["circle"].str.lower().str.strip() != "india"]
 
         # status_data = pd.read_excel(statuswise_file)
         norms_worksheet = spreadsheet.worksheet("Norms_Data")
@@ -101,9 +126,7 @@ def func1(raw_file):
         
         # Adding filter on teams, choosing customer xperience
         merged_data = merged_data[merged_data["team"].str.lower().str.strip() == "customer xperience"]
-
-        merged_data["age_reg_days"] = merged_data["age_from_call_reg"].dt.days 
-        merged_data["age_update_days"] = merged_data["age_from_call_update"].dt.days 
+ 
 
         # def assign_category(row):
         #     status = str(row["status"]).strip().lower()
@@ -152,7 +175,14 @@ def func1(raw_file):
         merged_data["enc1_flag"] = (merged_data["category"] == "Encroaching1").astype(int)
         merged_data["enc2_flag"] = (merged_data["category"] == "Encroaching2").astype(int)
         merged_data["enc3_flag"] = (merged_data["category"] == "Encroaching3").astype(int)
+
+        # To add 7+ and 15+ calls category
+        merged_data["age_reg_days"] = merged_data["age_from_call_reg"].dt.days.fillna(0).astype(int)
         
+        # # Correct: create boolean flag columns, cast True/False to 0/1
+        # merged_data["7+_calls"]  = ((merged_data["age_reg_days"] > 7)  & (merged_data["age_reg_days"] <= 14)).astype(int)
+
+        # merged_data["14+_calls"] = (merged_data["age_reg_days"] > 14).astype(int)
         # To write data in google sheet
         if merged_data is not None and not merged_data.empty:
             
@@ -169,6 +199,73 @@ def func1(raw_file):
     except Exception as e:
         print(f"Error in func1: {e}")
         show_popup(f"Error in function is: {e}", type= "error")
+
+
+def callAgewise_platter():
+    try:
+        # 1. Connect to Google Sheets
+        spreadsheet = connect_gsheet()
+
+        maindata_ws = spreadsheet.worksheet("main_Data")
+        main_data = maindata_ws.get_all_values()
+
+        merged_data = pd.DataFrame(main_data[1:], columns=main_data[0])
+        # Format Circle Names (Title Case & strip trailing spaces)
+        merged_data["circle"] = merged_data["circle"].astype(str).str.strip().str.title()
+
+        # 2. Ensure baseline tracking column is fully numeric 
+        merged_data["age_reg_days"] = pd.to_numeric(merged_data["age_reg_days"], errors='coerce').fillna(0).astype(int)
+
+        # 3. Create calculation DataFrame
+        df_calc = pd.DataFrame()
+        df_calc['circle'] = merged_data['circle'].replace('Nan', 'Unknown').replace('None', 'Unknown')
+
+        # --- 7+ BUCKET CONDITIONS (7 < age_reg_days <= 14) ---
+        is_7_to_14 = (merged_data["age_reg_days"] > 7) & (merged_data["age_reg_days"] <= 14)
+        
+        # Red Call if age_reg_days > 8
+        df_calc['Red Call 7+'] = np.where(is_7_to_14 & (merged_data["age_reg_days"] > 8), 1, 0)
+        # Encroaching if age_reg_days == 8
+        df_calc['Encroaching 7+'] = np.where(is_7_to_14 & (merged_data["age_reg_days"] == 8), 1, 0)
+
+        # --- 14+ BUCKET CONDITIONS (age_reg_days > 14) ---
+        is_above_14 = merged_data["age_reg_days"] > 14
+        
+        # Red Call if age_reg_days > 15
+        df_calc['Red Call 14+'] = np.where(is_above_14 & (merged_data["age_reg_days"] > 15), 1, 0)
+        # Encroaching if age_reg_days == 15
+        df_calc['Encroaching 14+'] = np.where(is_above_14 & (merged_data["age_reg_days"] == 15), 1, 0)
+
+        # 4. Group by Circle and aggregate the counts
+        report = df_calc.groupby('circle').sum().reset_index()
+
+        # 5. Calculate Column Totals & Append the Summary Total Row
+        totals = report.select_dtypes(include='number').sum()
+        total_row = pd.DataFrame([{'circle': 'Total', **totals.to_dict()}])
+        
+
+        # Combine data with the summary row
+        final_report = pd.concat([report, total_row], ignore_index=True)
+        final_report = final_report.rename(columns = {"circle" : "Circle"})
+        # 6. Export to Google Sheets
+        try:
+            worksheet = spreadsheet.worksheet("Circle_Agewise_Report")
+        except Exception:
+            # Create the worksheet cleanly if it doesn't exist
+            worksheet = spreadsheet.add_worksheet(title="Circle_Agewise_Report", rows="100", cols="20")
+            
+        # Clear previous data
+        worksheet.clear()
+        
+        # Convert everything to standard strings and upload arrays securely
+        data_to_upload = [final_report.columns.tolist()] + final_report.fillna(0).astype(str).values.tolist()
+        worksheet.update(data_to_upload)
+        # worksheet.update('A1', data_to_upload)
+        
+        print("Successfully uploaded the Circle-wise Agewise report with the new age-day rules!")
+
+    except Exception as e:
+        print(f"Error in callAgewise_platter: {e}")
 
 def circlewise_platter(merged_data):
     try:
@@ -1076,60 +1173,105 @@ def dealerwise_platter(merged_data):
         print(f"Error in dealerwise_platter function : {e}")
         show_popup(f"Error in dealerwise_platter report function : {e}", type = "error")
 
+# def apply_formatting(workbook, worksheet, summary, title_text):
+#     try:
+#         fmt_header     = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center'})
+#         fmt_main_title = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center', 'font_size': 14})
+#         fmt_red        = workbook.add_format({'bold': True, 'bg_color': "#FF0000", 'border': 1, 'align': 'center'})
+#         fmt_orange     = workbook.add_format({'bg_color': "#FFBF00", 'border': 1, 'align': 'center', 'bold': True})
+#         fmt_green      = workbook.add_format({'bg_color': "#8BF58B", 'border': 1, 'align': 'center', 'bold': True})
+#         fmt_white      = workbook.add_format({'border': 1, 'align': 'center', 'bold': True})
+
+#         # Single format for entire Total row
+#         fmt_total = workbook.add_format({'bold': True, 'bg_color': '#1F4E79', 'font_color': '#FFFFFF', 'border': 1, 'align': 'center'})
+
+#         # 1. Write Main Title
+#         report_date = datetime.now().strftime("%d-%b-%Y")
+#         worksheet.merge_range('A1:H1', f"{title_text} --- {report_date}", fmt_main_title)
+#         # can we set it dynamically as data contains columns
+#         total_row_idx = len(summary) - 1
+
+
+#         for row_num in range(2, len(summary) + 2):
+#             df_row_idx = row_num - 2
+
+#             status_value = str(summary.iloc[df_row_idx, 0]).upper()
+#             is_total = "TOTAL" in status_value   # ✅ key change
+
+#             for col_num in range(8):
+#                 value = summary.iloc[df_row_idx, col_num]
+
+#                 if is_total:
+#                     worksheet.write(row_num, col_num, value, fmt_total)
+#                 else:
+#                     fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
+#                     worksheet.write(row_num, col_num, value, fmt)
+                    
+#         # 3. Write Column Headers
+#         for col_num, value in enumerate(summary.columns.values):
+#             worksheet.write(1, col_num, value, fmt_header)
+
+#         worksheet.set_column('A:F', 18)
+
+#     except Exception as e:
+#         print(f"Error in Formatting {worksheet} is : {e}")
+#         show_popup(f"Error in Formatting {worksheet} is : {e}", type="error")
+
+
 def apply_formatting(workbook, worksheet, summary, title_text):
     try:
+        # 1. Base Setup & Configuration Measurements
+        num_cols = len(summary.columns)  # Dynamically gets the total number of columns
+        num_rows = len(summary)          # Total number of data rows
+
+        # Formats
         fmt_header     = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center'})
         fmt_main_title = workbook.add_format({'bold': True, 'bg_color': '#FFFF00', 'border': 1, 'align': 'center', 'font_size': 14})
         fmt_red        = workbook.add_format({'bold': True, 'bg_color': "#FF0000", 'border': 1, 'align': 'center'})
         fmt_orange     = workbook.add_format({'bg_color': "#FFBF00", 'border': 1, 'align': 'center', 'bold': True})
         fmt_green      = workbook.add_format({'bg_color': "#8BF58B", 'border': 1, 'align': 'center', 'bold': True})
         fmt_white      = workbook.add_format({'border': 1, 'align': 'center', 'bold': True})
+        fmt_total      = workbook.add_format({'bold': True, 'bg_color': '#1F4E79', 'font_color': '#FFFFFF', 'border': 1, 'align': 'center'})
 
-        # Single format for entire Total row
-        fmt_total = workbook.add_format({'bold': True, 'bg_color': '#1F4E79', 'font_color': '#FFFFFF', 'border': 1, 'align': 'center'})
-
-        # 1. Write Main Title
+        # 2. Write Dynamic Main Title Block
         report_date = datetime.now().strftime("%d-%b-%Y")
-        worksheet.merge_range('A1:H1', f"{title_text} --- {report_date}", fmt_main_title)
+        worksheet.merge_range(0, 0, 0, num_cols - 1, f"{title_text} --- {report_date}", fmt_main_title)
 
-        total_row_idx = len(summary) - 1
+        # 3. Write Column Headers Dynamically
+        for col_num, value in enumerate(summary.columns.values):
+            worksheet.write(1, col_num, value, fmt_header)
 
-        # # 2. Apply Data Formatting
-        # for row_num in range(2, len(summary) + 2):
-        #     df_row_idx = row_num - 2
-        #     is_total   = (df_row_idx == total_row_idx)
-
-        #     for col_num in range(6):
-        #         value = summary.iloc[df_row_idx, col_num]
-
-        #         if is_total:
-        #             # Same color for all 6 columns in total row
-        #             worksheet.write(row_num, col_num, value, fmt_total)
-        #         else:
-        #             fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
-        #             worksheet.write(row_num, col_num, value, fmt)
-
-
-        for row_num in range(2, len(summary) + 2):
+        # 4. Iterate and Format Cells Dynamically
+        for row_num in range(2, num_rows + 2):
             df_row_idx = row_num - 2
-
+            
+            # Check if this row is the summary total marker row
             status_value = str(summary.iloc[df_row_idx, 0]).upper()
-            is_total = "TOTAL" in status_value   # ✅ key change
+            is_total = "TOTAL" in status_value
 
-            for col_num in range(8):
+            for col_num in range(num_cols):
                 value = summary.iloc[df_row_idx, col_num]
 
                 if is_total:
                     worksheet.write(row_num, col_num, value, fmt_total)
                 else:
-                    fmt = [fmt_white, fmt_red, fmt_orange, fmt_green, fmt_orange, fmt_green, fmt_orange, fmt_green][col_num]
+                    # Fetch the column name for the current iteration and lower-case it
+                    col_name = str(summary.columns[col_num]).lower()
+                    
+                    # Apply formatting dynamically based on header text matches
+                    if "red call" in col_name:
+                        fmt = fmt_red
+                    elif "encroaching" in col_name:
+                        fmt = fmt_orange
+                    elif "platter" in col_name:
+                        fmt = fmt_green
+                    else:
+                        fmt = fmt_white  # Default formatting fallback (e.g., for the 'circle' column)
+                        
                     worksheet.write(row_num, col_num, value, fmt)
                     
-        # 3. Write Column Headers
-        for col_num, value in enumerate(summary.columns.values):
-            worksheet.write(1, col_num, value, fmt_header)
-
-        worksheet.set_column('A:F', 18)
+        # 5. Dynamically Autoscale and Set All Column Widths
+        worksheet.set_column(0, num_cols - 1, 18)
 
     except Exception as e:
         print(f"Error in Formatting {worksheet} is : {e}")
@@ -1236,6 +1378,7 @@ def fetch_and_format_report():
             {"sheet": "RAN_CN_DUE",                "title": "RAN_C/D_CN_DUE Calls On The Platter And Targets"},
             {"sheet": "WORK_IN_PROGRESS","title": "WORK_IN_PROGRESS Calls On The Platter And Targets"},
             {"sheet": "Dealer Platter",            "title": "Dealer Circlewise Platter And Targets"},
+            {"sheet": "Circle_Agewise_Report",            "title": "Circle Agewise Platter"},
         ]
 
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
