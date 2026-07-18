@@ -15,6 +15,7 @@ from main import (
     fetch_and_format_report,
     send_email,
     work_in_progress_status_platter,
+    callAgewise_platter,
 )
 from src.sidebar import render_sidebar
 
@@ -43,9 +44,9 @@ if page == "upload":
                         ran_cn_due_status_platter(final_df)
                         work_in_progress_status_platter(final_df)
                         dealerwise_platter(final_df)
-
-                        st.success("✅ All data updated in Database!")
-
+                        
+                    callAgewise_platter()
+                    st.success("✅ All data updated in Database!")
                 except Exception as e:
                     st.error(f"Error during processing: {e}")
         
