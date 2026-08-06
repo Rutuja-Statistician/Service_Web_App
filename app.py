@@ -16,6 +16,7 @@ from main import (
     send_email,
     work_in_progress_status_platter,
     callAgewise_platter,
+    upload_norms_data
 )
 from src.sidebar import render_sidebar
 
@@ -50,6 +51,27 @@ if page == "upload":
                 except Exception as e:
                     st.error(f"Error during processing: {e}")
         
+    st.divider()
+
+
+    # ---------------- UI Streamlit Block ----------------
+    st.header("📤 Upload Norms Data")
+
+    uploaded_norms_raw_file = st.file_uploader(
+        "Choose the Raw Data Excel file", 
+        type=["xlsx"], 
+        key="upload_norms"
+    )
+
+    if uploaded_norms_raw_file is not None:
+        if st.button("Upload Norms Data"):
+            with st.spinner("Processing data and pushing to Database..."):
+                try:
+                    upload_norms_data(uploaded_norms_raw_file)
+                    st.success("✅ All data updated in Database!")
+                except Exception as e:
+                    st.error(f"Error during processing: {e}")
+
     st.divider()
 
     # --- Download Section (independent of upload) ---
