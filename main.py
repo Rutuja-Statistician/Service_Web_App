@@ -60,6 +60,50 @@ def show_popup(message, type = "success"):
     elif type == "info":
         st.toast(f"ℹ️ {message}")
 
+def upload_norms_data(file):
+    try:
+        spreadsheet = connect_gsheet()
+        norms_data = pd.read_excel(file)
+
+        if norms_data.empty:
+            show_popup("No data found in uploaded Excel file!", type="warning")
+            return
+
+        # Normalize column names
+        norms_data.columns = norms_data.columns.str.lower().str.replace(" ", "_").str.strip()
+
+        # Validate required columns
+        required_cols = ["status", "norms", "number", "team"]
+        missing_cols = [col for col in required_cols if col not in norms_data.columns]
+        
+        if missing_cols:
+            raise KeyError(f"Missing required column(s): {', '.join(missing_cols)}")
+
+        # Open or create worksheet dynamically based on dataset dimensions
+        try:
+            normsData_worksheet = spreadsheet.worksheet("Norms_Data")
+        except gspread.WorksheetNotFound:
+            normsData_worksheet = spreadsheet.add_worksheet(
+                title="Norms_Data", 
+                rows=len(norms_data) + 100, 
+                cols=len(norms_data.columns) + 5
+            )
+
+        # Clear existing content
+        normsData_worksheet.clear()
+
+        # Prepare data matrix
+        data_to_write = [norms_data.columns.tolist()] + norms_data.fillna("").astype(str).values.tolist()
+
+        # Fixed: Standard gspread update call requiring explicit 'range_name'
+        normsData_worksheet.update("A1", data_to_write)
+        show_popup("Data stored in the main database!", type="success")
+
+    except Exception as e:
+        print(f"Error while uploading norms data: {e}")
+        show_popup(f"Error while uploading norms data: {e}", type="error")
+
+
 def func1(raw_file):
     try:
         spreadsheet = connect_gsheet()
