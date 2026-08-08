@@ -1467,7 +1467,6 @@ def fetch_and_format_report():
 
                     # 1. Safely check for fixed lead columns (case-insensitive match if needed)
                     lead_cols = [c for c in ["Date", "Circle"] if c in tracker_df.columns]
-
                     # 2. Extract p1, p2, p3 columns dynamically without duplicating code
                     p_cols = []
                     for prefix in ["p1", "p2", "p3"]:
