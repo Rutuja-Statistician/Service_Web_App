@@ -1459,10 +1459,36 @@ def fetch_and_format_report():
                 tracker_data = tracker_ws.get_all_values()
 
                 if tracker_data and len(tracker_data) >= 2:
+                    # tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
+
+                    # tracker_df.to_excel(writer, sheet_name="Tracker", index=False, startrow=1)
+
                     tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
 
-                    tracker_df.to_excel(writer, sheet_name="Tracker", index=False, startrow=1)
+                    # 1. Safely check for fixed lead columns (case-insensitive match if needed)
+                    lead_cols = [c for c in ["Date", "Circle"] if c in tracker_df.columns]
 
+                    # 2. Extract p1, p2, p3 columns dynamically without duplicating code
+                    p_cols = []
+                    for prefix in ["p1", "p2", "p3"]:
+                        cols = [
+                            c
+                            for c in tracker_df.columns
+                            if prefix in c.lower() and c not in lead_cols
+                        ]
+                        p_cols.extend(cols)
+                        print(f"{prefix} columns are:", cols)
+
+                    # 3. Combine ordered columns while catching remaining uncategorized columns
+                    col_order = lead_cols + p_cols
+                    remaining_cols = [c for c in tracker_df.columns if c not in col_order]
+                    final_order = col_order + remaining_cols
+
+                    # 4. Reorder and export safely
+                    tracker_df = tracker_df[final_order]
+                    tracker_df.to_excel(
+                        writer, sheet_name="Tracker", index=False, startrow=1
+                    )
                     # ✅ Use special tracker formatting
                     apply_tracker_excel_formatting(
                         writer.book,
