@@ -4,18 +4,17 @@ import io
 import pytz
 from datetime import datetime
 
-
 from main import (
     func1,
     circlewise_platter,
     statuswise_platter,
-    billing_code_status_platter,
+    rancdwc_status_platter,
     pdna_status_platter,
     ran_cn_due_status_platter,
     dealerwise_platter,          
     fetch_and_format_report,
     send_email,
-    work_in_progress_status_platter,
+    work_allocated_status_platter,
     callAgewise_platter,
     upload_norms_data
 )
@@ -41,10 +40,10 @@ if page == "upload":
                     if isinstance(final_df, pd.DataFrame):
                         circlewise_platter(final_df)
                         statuswise_platter(final_df)
-                        billing_code_status_platter(final_df)
+                        rancdwc_status_platter(final_df)
                         pdna_status_platter(final_df)
                         ran_cn_due_status_platter(final_df)
-                        work_in_progress_status_platter(final_df)
+                        work_allocated_status_platter(final_df)
                         dealerwise_platter(final_df)
                         
                     callAgewise_platter()
