@@ -103,6 +103,35 @@ def upload_norms_data(file):
         print(f"Error while uploading norms data: {e}")
         show_popup(f"Error while uploading norms data: {e}", type="error")
 
+def calculate_working_days_age(start_dates, end_dates, holidays_list):
+
+    # Standardize input dates to datetime format
+    start_series = pd.to_datetime(start_dates)
+    end_series = pd.to_datetime(end_dates)
+    
+    # Standardize holiday list to DatetimeIndex
+    holiday_index = pd.to_datetime(holidays_list)
+    
+    age_list = []
+    
+    for start, end in zip(start_series, end_series):
+        if pd.isna(start) or pd.isna(end) or start > end:
+            age_list.append(None)
+            continue
+            
+        # Generate working days range (Mon-Sat, excluding holidays)
+        bus_days = pd.bdate_range(
+            start=start, 
+            end=end, 
+            freq='C',  # Custom business day
+            weekmask='Mon Tue Wed Thu Fri Sat', 
+            holidays=holiday_index
+        )
+        
+        # Subtract 1 so same-day transactions evaluate to 0 days elapsed
+        age_list.append(max(0, len(bus_days) - 1))
+        
+    return pd.Series(age_list, index=start_series.index)
 
 def func1(raw_file):
     try:
@@ -123,17 +152,51 @@ def func1(raw_file):
         selected_columns = ["service_id","customer_name","company_name","circle", "customer_type", "call_date", "status_updated_date", "status_code","phone1","provider_phone1"]
         data = data[selected_columns]
         data["service_id"] = data["service_id"].astype(str)
+
+        # 1. Fetch holidays from Google Sheets
+        try:
+            holiday_worksheet = spreadsheet.worksheet("Holiday_List")
+            holiday_df = pd.DataFrame(holiday_worksheet.get_all_records())
+            holiday_df.columns = holiday_df.columns.str.lower().str.strip()
+            holidays = pd.to_datetime(holiday_df["date"]).tolist()
+        except Exception as holiday_err:
+            print(f"Warning: Could not fetch holidays, proceeding without them: {holiday_err}")
+            holidays = []
+
+        # 2. Normalize dates
         data["call_date"] = pd.to_datetime(data["call_date"]).dt.normalize()
         data["status_updated_date"] = pd.to_datetime(data["status_updated_date"]).dt.normalize()
 
         todayDate = pd.to_datetime('today').date()
-
         data["today_date"] = pd.to_datetime(todayDate)
-        data["age_from_call_reg"] = data["today_date"] - data["call_date"]
-        data["age_from_call_update"] = data["today_date"] - data["status_updated_date"]
 
+        # 3. Calculate business age in days (excluding Sundays and Holidays)
+        # data["age_reg_days"] = calculate_working_days_age(
+        #     data["call_date"], 
+        #     data["today_date"], 
+        #     holidays
+        # )
+
+        data["age_from_call_reg"] = data["today_date"] - data["call_date"]
         data["age_reg_days"] = data["age_from_call_reg"].dt.days 
-        data["age_update_days"] = data["age_from_call_update"].dt.days
+        
+        data["age_update_days"] = calculate_working_days_age(
+            data["status_updated_date"], 
+            data["today_date"], 
+            holidays
+        )
+
+        # data["call_date"] = pd.to_datetime(data["call_date"]).dt.normalize()
+        # data["status_updated_date"] = pd.to_datetime(data["status_updated_date"]).dt.normalize()
+
+        # todayDate = pd.to_datetime('today').date()
+
+        # data["today_date"] = pd.to_datetime(todayDate)
+        # data["age_from_call_reg"] = data["today_date"] - data["call_date"]
+        # data["age_from_call_update"] = data["today_date"] - data["status_updated_date"]
+
+        # data["age_reg_days"] = data["age_from_call_reg"].dt.days 
+        # data["age_update_days"] = data["age_from_call_update"].dt.days
 
         # Open or create the worksheet
         try:
@@ -243,6 +306,149 @@ def func1(raw_file):
     except Exception as e:
         print(f"Error in func1: {e}")
         show_popup(f"Error in function is: {e}", type= "error")
+
+
+# Calculating actual age between two dates without considering holidays
+
+# def func1(raw_file):
+#     try:
+#         spreadsheet = connect_gsheet()
+
+#         # Open or create the worksheet
+#         try:
+#             detailData_worksheet = spreadsheet.worksheet("Detailed_Data")
+#         except gspread.WorksheetNotFound:
+#             detailData_worksheet = spreadsheet.add_worksheet("Detailed_Data", rows=5000, cols=30)
+            
+#         # Clear existing data and write fresh
+#         detailData_worksheet.clear()
+
+#         data = pd.read_excel(raw_file)
+#         data.columns = data.columns.str.lower().str.replace(" ","_").str.replace(".", "_").str.strip()
+#         # To select the subset of the dataframe from the complete data
+#         selected_columns = ["service_id","customer_name","company_name","circle", "customer_type", "call_date", "status_updated_date", "status_code","phone1","provider_phone1"]
+#         data = data[selected_columns]
+#         data["service_id"] = data["service_id"].astype(str)
+#         data["call_date"] = pd.to_datetime(data["call_date"]).dt.normalize()
+#         data["status_updated_date"] = pd.to_datetime(data["status_updated_date"]).dt.normalize()
+
+#         todayDate = pd.to_datetime('today').date()
+
+#         data["today_date"] = pd.to_datetime(todayDate)
+#         data["age_from_call_reg"] = data["today_date"] - data["call_date"]
+#         data["age_from_call_update"] = data["today_date"] - data["status_updated_date"]
+
+#         data["age_reg_days"] = data["age_from_call_reg"].dt.days 
+#         data["age_update_days"] = data["age_from_call_update"].dt.days
+
+#         # Open or create the worksheet
+#         try:
+#             mainData_worksheet = spreadsheet.worksheet("main_Data")
+#         except gspread.WorksheetNotFound:
+#             mainData_worksheet = spreadsheet.add_worksheet("main_Data", rows=5000, cols=30)
+            
+#         # Clear existing data and write fresh
+#         mainData_worksheet.clear()
+
+#         if data is not None and not data.empty:
+            
+#             # Convert DataFrame to list of lists
+#             # data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+#             data_to_write = [data.columns.tolist()] + data.fillna("").astype(str).values.tolist()
+#             mainData_worksheet.update(data_to_write)
+            
+#             show_popup("Data stored in the main database", type = "success")
+#         else:
+#             show_popup("No data found to add in main database...!", type = "info")
+
+
+#         data = data[data["call_date"].dt.date != todayDate]
+#         data = data[data["circle"].str.lower().str.strip() != "india"]
+
+#         # status_data = pd.read_excel(statuswise_file)
+#         norms_worksheet = spreadsheet.worksheet("Norms_Data")
+#         norms_data = norms_worksheet.get_all_records()
+#         status_data = pd.DataFrame(norms_data)
+
+#         status_data.columns = status_data.columns.str.lower().str.strip().str.replace(" ", "_")
+
+#         merged_data = data.merge(status_data[["status","team", "number"]], left_on= "status_code", right_on="status", how= "left")
+        
+#         # Adding filter on teams, choosing customer xperience
+#         merged_data = merged_data[merged_data["team"].str.lower().str.strip() == "customer xperience"]
+ 
+
+#         # def assign_category(row):
+#         #     status = str(row["status"]).strip().lower()
+#         #     num = row["number"]
+#         #     if pd.isna(num): return ""
+#         #     age = row["age_reg_days"] if status in ["open", "work_allocated"] else row["age_update_days"]
+#         #     if pd.isna(age): return ""
+
+#         #     if age > num: return "Red Call"
+#         #     elif age == num: return "Encroaching1"
+#         #     elif age == num - 1: return "Encroaching2"
+#         #     return ""
+
+#         def assign_category(row):
+#             status = str(row["status"]).strip().lower()
+#             num = row["number"]
+
+#             if pd.isna(num):
+#                 return ""
+
+#             # Select correct age column
+#             age = row["age_reg_days"] if status in ["open", "work_allocated"] else row["age_update_days"]
+
+#             if pd.isna(age):
+#                 return ""
+
+#             # Special condition
+#             if status in ["open_rejected_false", "open_completed_false"]:
+#                 if age >= num:
+#                     return "Red Call"
+#                 return ""
+
+#             # Default logic
+#             if age > num:
+#                 return "Red Call"
+#             elif age == num:
+#                 return "Encroaching1"
+#             elif age == num - 1:
+#                 return "Encroaching2"
+#             elif age == num - 2:
+#                 return "Encroaching3"
+#             return ""
+
+#         merged_data["category"] = merged_data.apply(assign_category, axis=1)
+#         merged_data["red_call_flag"] = (merged_data["category"] == "Red Call").astype(int)
+#         merged_data["enc1_flag"] = (merged_data["category"] == "Encroaching1").astype(int)
+#         merged_data["enc2_flag"] = (merged_data["category"] == "Encroaching2").astype(int)
+#         merged_data["enc3_flag"] = (merged_data["category"] == "Encroaching3").astype(int)
+
+#         # To add 7+ and 15+ calls category
+#         merged_data["age_reg_days"] = merged_data["age_from_call_reg"].dt.days.fillna(0).astype(int)
+        
+#         # # Correct: create boolean flag columns, cast True/False to 0/1
+#         # merged_data["7+_calls"]  = ((merged_data["age_reg_days"] > 7)  & (merged_data["age_reg_days"] <= 14)).astype(int)
+
+#         # merged_data["14+_calls"] = (merged_data["age_reg_days"] > 14).astype(int)
+#         # To write data in google sheet
+#         if merged_data is not None and not merged_data.empty:
+            
+#             # Convert DataFrame to list of lists
+#             # data_to_write = [merged_data.columns.tolist()] + merged_data.astype(str).values.tolist()
+#             data_to_write = [merged_data.columns.tolist()] + merged_data.fillna("").astype(str).values.tolist()
+#             detailData_worksheet.update(data_to_write)
+            
+#             show_popup("Data stored in the database", type = "success")
+#         else:
+#             show_popup("No data found after filtering...!", type = "info")
+#         return merged_data
+
+#     except Exception as e:
+#         print(f"Error in func1: {e}")
+#         show_popup(f"Error in function is: {e}", type= "error")
 
 
 def callAgewise_platter():
@@ -946,20 +1152,20 @@ def statuswise_platter(merged_data):
         show_popup(f"Error in statuswise_platter is : {e}", type = "error")
 
 
-def billing_code_status_platter(merged_data):
+def rancdwc_status_platter(merged_data):
     try:
         spreadsheet = connect_gsheet()
 
         # To write data in google sheet
         try:
-            worksheet = spreadsheet.worksheet("Billing Code")
+            worksheet = spreadsheet.worksheet("RAN_C_DWC")
         except gspread.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet("Billing Code", rows=5000, cols=30)
+            worksheet = spreadsheet.add_worksheet("RAN_C_DWC", rows=5000, cols=30)
             
         # Clear existing data and write fresh
         worksheet.clear()
 
-        summary = merged_data[merged_data["status_code"].str.upper().str.strip() == "BILLING_CODE_PROBLEM"]
+        summary = merged_data[merged_data["status_code"].str.upper().str.strip() == "RAN_C_DWC"]
         
         if not merged_data.empty:
             summary = summary.groupby("circle").agg({
@@ -993,10 +1199,10 @@ def billing_code_status_platter(merged_data):
             data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
             worksheet.update(data_to_write)
 
-            show_popup("billing code platter report created successfully!", type = "success")
+            show_popup("ranc_dwc platter report created successfully!", type = "success")
     except Exception as e:
-        print(f"Error in billing code status platter function: {e}")
-        show_popup(f"Error in billing code status platter function : {e}", type = "error")
+        print(f"Error in ranc_dwc status platter function: {e}")
+        show_popup(f"Error in ranc_dwc status platter function : {e}", type = "error")
 
 def pdna_status_platter(merged_data):
     try:
@@ -1051,21 +1257,23 @@ def pdna_status_platter(merged_data):
         print(f"Error in pdna_status_platter function is : {e}")
         show_popup(f"Error in pdna_status_platter function : {e}", type = "error")
     
-def work_in_progress_status_platter(merged_data):
+def work_allocated_status_platter(merged_data):
     try:
         spreadsheet = connect_gsheet()
 
         # To write data in google sheet
         # Open or create the worksheet
         try:
-            worksheet = spreadsheet.worksheet("WORK_IN_PROGRESS")
+            worksheet = spreadsheet.worksheet("WORK_ALLOCATED")
         except gspread.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet("WORK_IN_PROGRESS", rows=5000, cols=30)
+            worksheet = spreadsheet.add_worksheet("WORK_ALLOCATED", rows=5000, cols=30)
 
         # Clear existing data and write fresh
         worksheet.clear()
         
-        merged_data = merged_data[(merged_data["status_code"].str.upper().str.strip() == "RAN_C_CN_DUE") | (merged_data["status_code"].str.upper().str.strip() == "WORK_IN_PROGRESS")]
+        merged_data = merged_data[(merged_data["status_code"].str.upper().str.strip() == "WORK_ALLOCATED")]
+        
+        # merged_data = merged_data[(merged_data["status_code"].str.upper().str.strip() == "RAN_C_CN_DUE") | (merged_data["status_code"].str.upper().str.strip() == "WORK_IN_PROGRESS")]
         
         if not merged_data.empty:
             summary = merged_data.groupby("circle").agg({
@@ -1099,10 +1307,10 @@ def work_in_progress_status_platter(merged_data):
             data_to_write = [summary.columns.tolist()] + summary.astype(str).values.tolist()
             worksheet.update(data_to_write)
             
-            show_popup("WORK_IN_PROGRESS report created successfully!", type = "success")
+            show_popup("WORK_ALLOCATED report created successfully!", type = "success")
     except Exception as e:
-        print(f"Error in ran_cn_due_status_platter function : {e}")
-        show_popup(f"Error in WORK_IN_PROGRESS report function : {e}", type = "error")
+        print(f"Error in work_allocated_status_platter function : {e}")
+        show_popup(f"Error in WORK_ALLOCATED report function : {e}", type = "error")
 
 def ran_cn_due_status_platter(merged_data):
     try:
@@ -1417,10 +1625,10 @@ def fetch_and_format_report():
         sheet_configs = [
             {"sheet": "Daily Circlewise Platter", "title": "All Circlewise Platter And Targets"},
             {"sheet": "Statuswise Platter",        "title": "Statuswise Platter And Targets"},
-            {"sheet": "Billing Code",              "title": "Billing Code Problem"},
+            # {"sheet": "RAN_C_DWC",              "title": "RAN_C_DWC"},
             {"sheet": "PDNA",                      "title": "PDNA"},
             {"sheet": "RAN_CN_DUE",                "title": "RAN_C/D_CN_DUE Calls On The Platter And Targets"},
-            {"sheet": "WORK_IN_PROGRESS","title": "WORK_IN_PROGRESS Calls On The Platter And Targets"},
+            # {"sheet": "WORK_ALLOCATED","title": "WORK_ALLOCATED Calls On The Platter And Targets"},
             {"sheet": "Dealer Platter",            "title": "Dealer Circlewise Platter And Targets"},
             {"sheet": "Circle_Agewise_Report",            "title": "Circle Agewise Platter"},
         ]
@@ -1459,14 +1667,11 @@ def fetch_and_format_report():
                 tracker_data = tracker_ws.get_all_values()
 
                 if tracker_data and len(tracker_data) >= 2:
-                    # tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
-
-                    # tracker_df.to_excel(writer, sheet_name="Tracker", index=False, startrow=1)
-
                     tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
 
                     # 1. Safely check for fixed lead columns (case-insensitive match if needed)
                     lead_cols = [c for c in ["Date", "Circle"] if c in tracker_df.columns]
+
                     # 2. Extract p1, p2, p3 columns dynamically without duplicating code
                     p_cols = []
                     for prefix in ["p1", "p2", "p3"]:
@@ -1488,6 +1693,10 @@ def fetch_and_format_report():
                     tracker_df.to_excel(
                         writer, sheet_name="Tracker", index=False, startrow=1
                     )
+                # if tracker_data and len(tracker_data) >= 2:
+                #     tracker_df = pd.DataFrame(tracker_data[1:], columns=tracker_data[0])
+                #     tracker_df.to_excel(writer, sheet_name="Tracker", index=False, startrow=1)
+
                     # ✅ Use special tracker formatting
                     apply_tracker_excel_formatting(
                         writer.book,
@@ -1595,4 +1804,3 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
             server.quit()
         except:
             pass
-
