@@ -1185,7 +1185,7 @@ def rancdwc_status_platter(merged_data):
             summary = summary[col_order]
             
             # Droping the rows where Platter2 is zero
-            summary= summary[summary["Platter2"] != 0]
+            # summary= summary[summary["Platter2"] != 0]
 
             # Sort by Platter1 descending BEFORE adding Total row
             summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
@@ -1238,7 +1238,7 @@ def pdna_status_platter(merged_data):
             summary = summary[col_order]
 
             # Droping the rows where Platter2 is zero
-            summary= summary[summary["Platter2"] != 0]
+            # summary= summary[summary["Platter2"] != 0]
 
             # Sort by Platter1 descending BEFORE adding Total row
             summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
@@ -1293,7 +1293,7 @@ def work_allocated_status_platter(merged_data):
             summary = summary[col_order]
 
             # Droping the rows where Platter2 is zero
-            summary= summary[summary["Platter2"] != 0]
+            # summary= summary[summary["Platter2"] != 0]
 
             # Sort by Platter1 descending BEFORE adding Total row
             summary = summary.sort_values("Platter1", ascending=False).reset_index(drop=True)
@@ -1625,10 +1625,10 @@ def fetch_and_format_report():
         sheet_configs = [
             {"sheet": "Daily Circlewise Platter", "title": "All Circlewise Platter And Targets"},
             {"sheet": "Statuswise Platter",        "title": "Statuswise Platter And Targets"},
-            # {"sheet": "RAN_C_DWC",              "title": "RAN_C_DWC"},
+            {"sheet": "RAN_C_DWC",              "title": "RAN_C_DWC"},
             {"sheet": "PDNA",                      "title": "PDNA"},
             {"sheet": "RAN_CN_DUE",                "title": "RAN_C/D_CN_DUE Calls On The Platter And Targets"},
-            # {"sheet": "WORK_ALLOCATED","title": "WORK_ALLOCATED Calls On The Platter And Targets"},
+            {"sheet": "WORK_ALLOCATED","title": "WORK_ALLOCATED Calls On The Platter And Targets"},
             {"sheet": "Dealer Platter",            "title": "Dealer Circlewise Platter And Targets"},
             {"sheet": "Circle_Agewise_Report",            "title": "Circle Agewise Platter"},
         ]
