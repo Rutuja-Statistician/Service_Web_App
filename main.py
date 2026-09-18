@@ -1719,7 +1719,7 @@ def fetch_and_format_report():
                 if raw_data and len(raw_data) >= 2:
                     raw_df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
 
-                    raw_df = raw_df[["circle","status_code","service_id", "customer_name","phone1","company_name","provider_phone1","category"]]
+                    raw_df = raw_df[["circle","status_code","service_id", "customer_name","phone1","company_name","provider_phone1","age_reg_days","age_update_days","category"]]
 
                     raw_df = raw_df[(raw_df["category"] == "Red Call") | (raw_df["category"] == "Encroaching1") | (raw_df["category"] == "Encroaching2")]
 
@@ -1748,7 +1748,6 @@ def fetch_and_format_report():
         print(f"Error in fetch_and_format_report: {e}")
         show_popup(f"Error generating report: {e}", type="error")
         return None
-
 
 def send_email(sender_email, app_password, recipient_email, cc_emails, file_bytes):
     IST = pytz.timezone('Asia/Kolkata')
