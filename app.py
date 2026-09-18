@@ -4,7 +4,6 @@ import io
 import pytz
 from datetime import datetime
 
-
 from main import (
     func1,
     circlewise_platter,
