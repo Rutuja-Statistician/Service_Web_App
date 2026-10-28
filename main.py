@@ -1493,9 +1493,9 @@ def companynamewise_platter(merged_data):
 
         summary = summary[col_order]
 
-        # 6. Sort detailed rows by Platter1 descending
+        # 6. Sort detailed rows by Red Call descending
         summary = summary.sort_values(
-            "Platter1",
+            "Red Call",
             ascending=False
         ).reset_index(drop=True)
 
@@ -1957,6 +1957,7 @@ def send_email(sender_email, app_password, recipient_email, cc_emails, file_byte
             server.quit()
         except:
             pass
+            
 
 
 
