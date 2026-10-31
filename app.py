@@ -1,245 +1,331 @@
-import streamlit as st
-import pandas as pd
 import io
 import pytz
+import pandas as pd
+import streamlit as st
 from datetime import datetime
+from login import render_login_page
+from src.sidebar import render_sidebar
+from circlehead import render_dashboard
 
 from main import (
     func1,
-    circlewise_platter,
-    companynamewise_platter,
-    statuswise_platter,
-    rancdwc_status_platter,
-    pdna_status_platter,
-    ran_cn_due_status_platter,
-    dealerwise_platter,          
-    fetch_and_format_report,
-    send_email,
-    work_allocated_status_platter,
-    callAgewise_platter,
-    upload_norms_data
-)
-from src.sidebar import render_sidebar
+    update_ch_raw_data,
+    update_ho_raw_data,
+    checking_call_age_ch_data,
+    update_call_assignment_in_ho,
+    calls_data,
+convert_df_to_formatted_excel,
+get_missing_remarks_report)
 
-st.set_page_config(page_title="Service Report Generator", layout="wide")
+st.set_page_config(page_title="Service Call Status App", layout="wide")
 
+# ── 1. Login gate ─────────────────────────────────────────
+if not render_login_page():
+    st.stop()
+
+# ── 2. Sidebar ────────────────────────────────────────────
 page = render_sidebar()
 
-# --- PAGE: Upload File & Create Report ---
-if page == "upload":
-    st.header("📤 Upload File & Create Report")
+# ── 3. Role shortcuts ─────────────────────────────────────
+role      = st.session_state.get("user_role", "").strip().lower()
+user_name = st.session_state.get("user_name", "")
 
-    uploaded_raw_file = st.file_uploader("Choose the Raw Data Excel file", type=["xlsx"])
+is_ho = role == "ho"
+is_ch = role == "ch"
+
+def user_info_caption():
+    parts = [f"Logged in as **{user_name}**"]
+    if st.session_state.get("user_role"):
+        parts.append(f"Role: {st.session_state['user_role']}")
+    if st.session_state.get("user_regions"):
+        parts.append(f"Regions: {st.session_state['user_regions']}")
+    st.caption("  |  ".join(parts))
+
+def access_denied():
+    st.warning("⚠️ You don't have permission to access this page.")
+    st.stop()
+
+
+def get_ch_regions() -> list[str] | None:
+    if is_ho:
+        return None                     # HO sees all rows
+    raw = st.session_state.get("user_regions", "")
+    if not raw:
+        return []                       # CH with nothing assigned → sees nothing
+    return [r.strip() for r in str(raw).split(",") if r.strip()]
+
+# ── 4. Pages ──────────────────────────────────────────────
+
+# ── Upload (HO only) ──────────────────────────────────────
+if page == "upload":
+    if is_ch:
+        access_denied()
+
+    st.header("📤 Upload File & Create Report")
+    user_info_caption()
+
+    uploaded_raw_file = st.file_uploader(
+        "Choose the Raw Data Excel file", type=["xlsx"], key="raw_file"
+    )
+
+    # if uploaded_raw_file is not None:
+    #     if st.button("Upload Data"):
+    #         with st.spinner("Processing data and pushing to Database..."):
+    #             try:
+    #                 checking_call_age_ch_data()
+    #                 final_df = func1(uploaded_raw_file)
+    #                 if isinstance(final_df, pd.DataFrame):
+    #                     update_ch_raw_data()
+    #                     update_ho_raw_data()
+    #                     st.success("✅ Data updated in Database!")
+    #             except Exception as e:
+    #                 st.error(f"Error during processing: {e}")
 
     if uploaded_raw_file is not None:
-        if st.button("Generate Report"):
-            with st.spinner("Processing data and pushing to Database..."):
+        if st.button("Upload Data"):
+            with st.spinner("Processing data and updating call records..."):
                 try:
-                    # Step 1: Process raw file → push all sheets to Google Sheets
+                    # STEP 1: Process the latest uploaded Excel file.
+                    # Detailed_Data will now contain the latest status_code,
+                    # status, team, number, and other updated fields.
                     final_df = func1(uploaded_raw_file)
 
                     if isinstance(final_df, pd.DataFrame):
-                        circlewise_platter(final_df)
-                        companynamewise_platter(final_df)
-                        statuswise_platter(final_df)
-                        rancdwc_status_platter(final_df)
-                        pdna_status_platter(final_df)
-                        ran_cn_due_status_platter(final_df)
-                        work_allocated_status_platter(final_df)
-                        dealerwise_platter(final_df)
-                        
-                    callAgewise_platter()
-                    st.success("✅ All data updated in Database!")
+
+                        # STEP 2: Synchronize CH Raw Data.
+                        update_ch_raw_data()
+
+                        # STEP 3: Move calls that have reached the transfer
+                        # age from CH Raw Data to HO Raw Data.
+                        checking_call_age_ch_data()
+
+                        # STEP 4: Synchronize HO Raw Data using the latest
+                        # data in Detailed_Data.
+                        update_ho_raw_data()
+
+                        st.success("✅ Data updated successfully!")
+
+                    else:
+                        st.error(
+                            "❌ Raw data processing failed. "
+                            "Please check the error messages."
+                        )
+
                 except Exception as e:
                     st.error(f"Error during processing: {e}")
-        
+
     st.divider()
 
+    st.header("📤 Upload Call Assigned File")
+    # user_info_caption()
 
-    # ---------------- UI Streamlit Block ----------------
-    st.header("📤 Upload Norms Data")
-
-    uploaded_norms_raw_file = st.file_uploader(
-        "Choose the Raw Data Excel file", 
-        type=["xlsx"], 
-        key="upload_norms"
+    uploaded_call_assigned_file = st.file_uploader(
+        "Choose the Call Assigned Data Excel file", type=["xlsx"], key="assigned_file"
     )
 
-    if uploaded_norms_raw_file is not None:
-        if st.button("Upload Norms Data"):
-            with st.spinner("Processing data and pushing to Database..."):
+    if uploaded_call_assigned_file is not None:
+        if st.button("Upload Call Assigned Data"):
+            with st.spinner("Processing assignments and updating HO Raw Data..."):
                 try:
-                    upload_norms_data(uploaded_norms_raw_file)
-                    st.success("✅ All data updated in Database!")
+                    # 1. Read the newly uploaded file
+                    assigned_df = pd.read_excel(uploaded_call_assigned_file)
+                    assigned_df.columns = assigned_df.columns.str.strip().str.lower().str.replace(" ","_")
+                    
+                    # Basic validation to ensure required columns exist
+                    if "service_id" not in assigned_df.columns or "code" not in assigned_df.columns:
+                        st.error("❌ The uploaded file must contain 'service_id' and 'code' columns.")
+                    else:
+                        
+                        success = update_call_assignment_in_ho(assigned_df)
+                        if success:
+                            st.success("✅ Call Assigned data updated in HO Raw Data successfully!")
+                        else:
+                            st.error("❌ Failed to update HO Raw Data.")
+                            
                 except Exception as e:
                     st.error(f"Error during processing: {e}")
 
     st.divider()
 
-    # --- Download Section (independent of upload) ---
-    st.subheader("📥 Download Platter Report")
-    st.caption("Fetches latest data directly from Database and downloads as Excel.")
+    # --- Streamlit UI Block ---
+    st.header("📥 Download Summary Report")
 
-    if st.button("📥 Format Platter Report"):
-        with st.spinner("Fetching data from Database and formatting..."):
-            report_data = fetch_and_format_report()
-
-            if report_data:
+    if st.button("Generate Summary Report"):
+        with st.spinner("Fetching data and creating beautifully formatted report..."):
+            df = calls_data()
+        
+            if df is not None:
+                # Convert to formatted Excel bytes
+                excel_data = convert_df_to_formatted_excel(df)
+            
+                # Setup timezone and filenames
                 IST = pytz.timezone('Asia/Kolkata')
-                today_str = datetime.now().strftime("%Y-%m-%d")
-                time_str  = datetime.now(IST).strftime("%H:%M")
+                file_timestamp = datetime.now(IST).strftime('%Y%m%d_%H%M')
+            
+                # Display download link
+                st.success("Report generated successfully!")
                 st.download_button(
-                    label="⬇️ Click here to Download",
-                    data=report_data,
-                    file_name=f"service_platter_report_{datetime.now(IST).strftime('%Y%m%d_%H%M')}.xlsx",
+                    label="⬇️ Click here to Download Excel",
+                    data=excel_data,
+                    file_name=f"summary_report_{file_timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+            else:
+                st.error("Could not retrieve data. Please check your connection or Google Sheet.")
 
     st.divider()
 
-    # --- Download Section (independent of upload) ---
-    st.subheader("📥 Email Reports")
+# ── Missing Remarks Audit Section ────────────────────────
+    st.header("📋 Download Missing Remarks Audit Report")
+    st.write("Identify CH & HO calls that are eligible for remarks but have missing entries across past working days.")
 
-    if st.button("📧 Send Email Report"):
-        with st.spinner("Generating and sending email..."):
-            report_data = fetch_and_format_report()
+    col1, col2 = st.columns(2)
 
-            sender_email = st.secrets["connections"]["gsheets"]["sender_email"]
-            sender_password = st.secrets["connections"]["gsheets"]["sender_password"]
-            recipient_email = st.secrets["connections"]["gsheets"]["recipient_email"]
-            cc_emails = st.secrets["connections"]["gsheets"]["cc_email"]
-            print(cc_emails)
-            if report_data:
-                send_email(
-                    sender_email,
-                    sender_password,
-                    recipient_email,
-                    cc_emails,
-                    report_data
-                )
-                st.success("✅ Email sent successfully!")
-            else:
-                st.error("❌ Failed to generate report")
+    with col1:
+        selected_date = st.date_input(
+            "Select Target Base Date (By Default :- Today Date)",
+            value=pd.Timestamp.now().date(),
+            format="YYYY-MM-DD",
+            key="missing_remarks_target_date"
+        )
 
+    with col2:
+        num_days = st.number_input(
+            "Number of Working Days to Check (Excl. Sundays)",
+            min_value=1,
+            max_value=30,
+            value=3,
+            step=1,
+            key="missing_remarks_num_days"
+        )
 
+    # Trigger report generation and persist state
+    if st.button("Generate Missing Remarks Report", key="btn_missing_remarks"):
+        target_date_str = selected_date.strftime("%Y-%m-%d")
 
-# import streamlit as st
-# import pandas as pd
-# import io
-# import pytz
-# from datetime import datetime
+        with st.spinner(f"Auditing remarks prior to {target_date_str} for {num_days} working day(s)..."):
+            reports = get_missing_remarks_report(
+                target_date_str=target_date_str, 
+                num_days=int(num_days)
+            )
 
-# from main import (
-#     func1,
-#     circlewise_platter,
-#     statuswise_platter,
-#     rancdwc_status_platter,
-#     pdna_status_platter,
-#     ran_cn_due_status_platter,
-#     dealerwise_platter,          
-#     fetch_and_format_report,
-#     send_email,
-#     work_allocated_status_platter,
-#     callAgewise_platter,
-#     upload_norms_data
-# )
-# from src.sidebar import render_sidebar
+            df_ch = reports.get("CH", pd.DataFrame())
+            df_ho = reports.get("HO", pd.DataFrame())
 
-# st.set_page_config(page_title="Service Report Generator", layout="wide")
+            # Generate multi-sheet Excel workbook
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                df_ch.to_excel(writer, sheet_name="CH Pending", index=False)
+                df_ho.to_excel(writer, sheet_name="HO Pending", index=False)
 
-# page = render_sidebar()
+            IST = pytz.timezone('Asia/Kolkata')
+            file_timestamp = datetime.now(IST).strftime('%Y%m%d_%H%M')
+            filename = f"missing_remarks_report_{target_date_str}_{file_timestamp}.xlsx"
 
-# # --- PAGE: Upload File & Create Report ---
-# if page == "upload":
-#     st.header("📤 Upload File & Create Report")
+            # Save results into session state so they survive app reruns (downloads, interactions)
+            st.session_state["missing_remarks_data"] = {
+                "df_ch": df_ch,
+                "df_ho": df_ho,
+                "excel_bytes": excel_buffer.getvalue(),
+                "filename": filename,
+                "target_date_str": target_date_str
+            }
 
-#     uploaded_raw_file = st.file_uploader("Choose the Raw Data Excel file", type=["xlsx"])
+    # ── Display Audit Results (Persisted via Session State) ──────────
+    if "missing_remarks_data" in st.session_state:
+        audit_data = st.session_state["missing_remarks_data"]
+        df_ch = audit_data["df_ch"]
+        df_ho = audit_data["df_ho"]
+        total_records = len(df_ch) + len(df_ho)
 
-#     if uploaded_raw_file is not None:
-#         if st.button("Generate Report"):
-#             with st.spinner("Processing data and pushing to Database..."):
-#                 try:
-#                     # Step 1: Process raw file → push all sheets to Google Sheets
-#                     final_df = func1(uploaded_raw_file)
+        if total_records == 0:
+            st.info("ℹ️ No eligible pending call remarks found for the selected criteria!")
+        else:
+            st.success(f"✅ Found {len(df_ch)} CH record(s) and {len(df_ho)} HO record(s) missing remarks.")
 
-#                     if isinstance(final_df, pd.DataFrame):
-#                         circlewise_platter(final_df)
-#                         statuswise_platter(final_df)
-#                         rancdwc_status_platter(final_df)
-#                         pdna_status_platter(final_df)
-#                         ran_cn_due_status_platter(final_df)
-#                         work_allocated_status_platter(final_df)
-#                         dealerwise_platter(final_df)
-                        
-#                     callAgewise_platter()
-#                     st.success("✅ All data updated in Database!")
-#                 except Exception as e:
-#                     st.error(f"Error during processing: {e}")
-        
-#     st.divider()
+            st.download_button(
+                label="⬇️ Download Missing Remarks Excel (CH & HO Sheets)",
+                data=audit_data["excel_bytes"],
+                file_name=audit_data["filename"],
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_missing_remarks"
+            )
 
+            # ── Summary Metrics & Tables ──────────────────────────────
+            st.markdown("---")
+            st.subheader("📊 Summary Breakdowns")
 
-#     # ---------------- UI Streamlit Block ----------------
-#     st.header("📤 Upload Norms Data")
+            col_ch, col_ho = st.columns(2)
 
-#     uploaded_norms_raw_file = st.file_uploader(
-#         "Choose the Raw Data Excel file", 
-#         type=["xlsx"], 
-#         key="upload_norms"
-#     )
+            # 1. CH Circle-wise Summary
+            with col_ch:
+                st.markdown("### 🏢 CH Missing Remarks (Circle-wise)")
+                circle_col = next((c for c in ['circle', 'circle_name', 'Circle', 'Circle Name'] if c in df_ch.columns), None)
 
-#     if uploaded_norms_raw_file is not None:
-#         if st.button("Upload Norms Data"):
-#             with st.spinner("Processing data and pushing to Database..."):
-#                 try:
-#                     upload_norms_data(uploaded_norms_raw_file)
-#                     st.success("✅ All data updated in Database!")
-#                 except Exception as e:
-#                     st.error(f"Error during processing: {e}")
+                if not df_ch.empty and circle_col and 'service_id' in df_ch.columns:
+                    summary_ch = (
+                        df_ch.groupby(circle_col)['service_id']
+                        .nunique()
+                        .reset_index(name="Pending Calls Count")
+                        .sort_values(by="Pending Calls Count", ascending=False)
+                    )
+                    total_row = pd.DataFrame({f"{circle_col}": ["Total"], "Pending Calls Count": [summary_ch["Pending Calls Count"].sum()]})
+                    summary_ch = pd.concat([summary_ch,total_row], ignore_index= True)
+                    st.dataframe(summary_ch, use_container_width=True, hide_index=True)
+                elif df_ch.empty:
+                    st.caption("No CH records pending.")
+                else:
+                    st.warning("Required columns (`circle` or `service_id`) missing in CH dataset.")
 
-#     st.divider()
+            # 2. HO CCO-wise Summary
+            with col_ho:
+                st.markdown("### 👤 HO Missing Remarks (CCO-wise)")
+                cco_col = next((c for c in ['cco_name', 'cco', 'CCO Name', 'CCO'] if c in df_ho.columns), None)
 
-#     # --- Download Section (independent of upload) ---
-#     st.subheader("📥 Download Platter Report")
-#     st.caption("Fetches latest data directly from Database and downloads as Excel.")
+                if not df_ho.empty and cco_col and 'service_id' in df_ho.columns:
+                    summary_ho = (
+                        df_ho.groupby(cco_col)['service_id']
+                        .nunique()
+                        .reset_index(name="Pending Calls Count")
+                        .sort_values(by="Pending Calls Count", ascending=False)
+                    )
+                    toral_row_ho = pd.DataFrame({f"{cco_col}" : ["Total"], "Pending Calls Count": [summary_ho["Pending Calls Count"].sum()]})
+                    summary_ho = pd.concat([summary_ho,toral_row_ho], ignore_index = True)
 
-#     if st.button("📥 Format Platter Report"):
-#         with st.spinner("Fetching data from Database and formatting..."):
-#             report_data = fetch_and_format_report()
+                    st.dataframe(summary_ho, use_container_width=True, hide_index=True)
+                elif df_ho.empty:
+                    st.caption("No HO records pending.")
+                else:
+                    st.warning("Required columns (`cco_name` or `service_id`) missing in HO dataset.")
 
-#             if report_data:
-#                 IST = pytz.timezone('Asia/Kolkata')
-#                 today_str = datetime.now().strftime("%Y-%m-%d")
-#                 time_str  = datetime.now(IST).strftime("%H:%M")
-#                 st.download_button(
-#                     label="⬇️ Click here to Download",
-#                     data=report_data,
-#                     file_name=f"service_platter_report_{datetime.now(IST).strftime('%Y%m%d_%H%M')}.xlsx",
-#                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#                 )
+    st.divider()
 
-#     st.divider()
+# ── HO Dashboard (HO only) ────────────────────────────────
+elif page == "ho_dashboard":
+    if is_ch:
+        access_denied()
 
-#     # --- Download Section (independent of upload) ---
-#     st.subheader("📥 Email Reports")
+    user_info_caption()
+    render_dashboard(
+        sheet_name    = "HO Raw Data",
+        title         = "📌 HO Dashboard",
+        allow_remark  = True,
+        # region_filter = None,       # HO sees all rows
+        region_filter = get_ch_regions(),       # HO sees all rows
+    )
 
-#     if st.button("📧 Send Email Report"):
-#         with st.spinner("Generating and sending email..."):
-#             report_data = fetch_and_format_report()
+# ── CH Dashboard (both roles can view) ────────────────────
+#
+#   CH  → allow_remark=True,  region_filter = their assigned circles
+#   HO  → allow_remark=False, region_filter = None (sees all rows, read-only)
 
-#             sender_email = st.secrets["connections"]["gsheets"]["sender_email"]
-#             sender_password = st.secrets["connections"]["gsheets"]["sender_password"]
-#             recipient_email = st.secrets["connections"]["gsheets"]["recipient_email"]
-#             cc_emails = st.secrets["connections"]["gsheets"]["cc_email"]
-#             print(cc_emails)
-#             if report_data:
-#                 send_email(
-#                     sender_email,
-#                     sender_password,
-#                     recipient_email,
-#                     cc_emails,
-#                     report_data
-#                 )
-#                 st.success("✅ Email sent successfully!")
-#             else:
-#                 st.error("❌ Failed to generate report")
+elif page == "ch_dashboard":
+    # To fetch the user information
+    user_info_caption()
+    # To render the dashboard on the page
+    render_dashboard(
+        sheet_name    = "CH Raw Data",
+        title         = "📊 CH Dashboard",
+        allow_remark  = is_ch,
+        region_filter = get_ch_regions(),   # None for HO, list for CH
+    )
